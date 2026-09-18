@@ -1,0 +1,46 @@
+{
+  "project_name": "",
+  "project_root": "/Game/",
+  "analyzed_at": "2026-09-17T04:53:10.040553+00:00",
+  "summary": {
+    "total_blueprints": 1,
+    "total_nodes": 4,
+    "total_connections": 0,
+    "total_elapsed_ms": 0.0
+  },
+  "distribution": {
+    "by_type": {
+      "Actor": 1
+    },
+    "by_package": {
+      "/Game": 1
+    },
+    "by_parent_class": {
+      "Actor": 1
+    }
+  },
+  "top_largest": [
+    {
+      "path": "/Game/BP_HelloMirror",
+      "name": "BP_HelloMirror",
+      "type": "Actor",
+      "node_count": 4,
+      "variable_count": 0,
+      "connection_count": 0,
+      "inheritance_depth": 2,
+      "package": "/Game"
+    }
+  ],
+  "deep_inheritance": [],
+  "circular_dependencies": [],
+  "coupling": {
+    "total_references": 0,
+    "cross_package_references": 0,
+    "cross_package_ratio": 0.0,
+    "top_coupled_pairs": []
+  },
+  "interface_usage": [],
+  "deep_dives": [],
+  "errors": [],
+  "warnings": []
+}

@@ -1,0 +1,58 @@
+"""
+unpin_console_refs.py.tmpl — 修法3：PyConsoleGlobalDict 目标资产解绑脚本（模板）
+================================================================
+由 ue5_bridge.py 的 `/command unpin_console_refs` 加载，
+通过 bridge.execute_python_on_game_thread() 注入 GameThread 执行。
+
+占位符：
+  {TARGET}      — 目标资产**包路径**（如 /Game/Blueprints/BP_X）
+  {RESULT_FILE} — JSON 结果输出文件路径
+
+🔒 硬边界（T-20260914-UE5BRIDGE-BUILD-HOLD-FIX · 阶段一 §2 修法3）：
+   只删除 path == TARGET / 以 "<TARGET>." / "<TARGET>:" 开头的项，
+   **绝不**盲删 globals() 其它键；逐项记 audit trail（removed / kept）。
+
+⚠️ 本脚本自身亦运行在持久 PyConsoleGlobalDict 中 → 自身绝不绑定任何 UObject：
+   主体包在 _ue5_unpin_main() 内，局部 UObject 引用随函数返回即刻释放。
+"""
+import unreal
+import json
+
+_target = {TARGET}
+
+
+def _ue5_unpin_main():
+    g = globals()
+    removed = []
+    kept = []
+    for _k in list(g.keys()):
+        try:
+            _v = g.get(_k, None)
+        except Exception:
+            continue
+        try:
+            if not isinstance(_v, unreal.Object):
+                continue
+        except Exception:
+            continue
+        _p = ""
+        try:
+            _p = str(_v.get_path_name())
+        except Exception:
+            _p = ""
+        if _p == _target or _p.startswith(_target + ".") or _p.startswith(_target + ":"):
+            try:
+                g.pop(_k, None)
+                removed.append({"key": _k, "path": _p, "type": type(_v).__name__})
+            except Exception as _e:
+                kept.append({"key": _k, "path": _p, "pop_err": str(_e)})
+    _gc = None
+    try:
+        _gc = bool(unreal.SystemLibrary.collect_garbage())
+    except Exception as _e:
+        _gc = "error: " + str(_e)
+    return {"removed": removed, "kept": kept, "gc": _gc}
+
+
+with open({RESULT_FILE}, 'w', encoding='utf-8') as _f:
+    json.dump(_ue5_unpin_main(), _f, ensure_ascii=False, default=str)

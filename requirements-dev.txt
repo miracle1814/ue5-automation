@@ -1,0 +1,3 @@
+# Offline test suite (no editor / no UE required)
+pytest>=8.0
+pytest-timeout>=2.3

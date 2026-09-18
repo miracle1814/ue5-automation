@@ -1,0 +1,524 @@
+"""
+game_thread_build.py.tmpl — GameThread 蓝图构建脚本（模板）
+================================================================
+由 ue5_bridge.py 的 POST /build 和 POST /build-batch 端点加载，
+通过 bridge.execute_python_on_game_thread() 注入 GameThread 执行。
+
+占位符：
+  {SPEC_FILE}  — JSON spec 文件路径（含 blueprint_path/events/functions/connections/compile_after）
+  {RESULT_FILE} — JSON 结果输出文件路径
+
+⚠️ 本脚本在 GameThread 上运行，使用 unreal.BlueprintPythonBridge.* 静态方法
+   （不可使用 bridge.* 包装函数，其内部 AsyncTask 会导致嵌套死锁）。
+
+N01 修复（2026-07-27）：从 ue5_bridge.py /build-batch 内联字符串拼接提取为模板。
+"""
+import unreal
+import json
+import traceback
+
+_spec_file = {SPEC_FILE}
+_result_file = {RESULT_FILE}
+
+
+def _ue5_gt_main():
+    """GT 主体（修法1 · T-20260914-UE5BRIDGE-BUILD-HOLD-FIX）。
+
+    模块级只保留 import / _spec_file / _result_file（字符串）；所有 UObject
+    绑定（bp / graph / node / src_node / dst_node ...）降为函数局部量，
+    随函数返回立即失去引用 → 包装器析构 → 不再被持久 PyConsoleGlobalDict
+    保活（保活会让 delete_asset 恒 False）。
+    """
+
+    result = {"success": True, "steps": []}
+
+
+    # ── T-20260912-UE5BRIDGE-TITLEGATE-FIX · 同名节点定位 GUID 闸门 ──────────────
+    # 规则与 ue5_bridge._pywrap_locate_node_strict 同源：GUID 优先 → 标题同名
+    # fail-loud（绝不静默连错线 / 绝不静默误判存在）。本模板在 GameThread 内运行，
+    # 只能使用 unreal.BlueprintPythonBridge.* 静态方法，故此处内联同语义实现。
+    def _norm_guid_ref(s):
+        """入参是否「形如 GUID」→ 归一化后的 32 位大写 hex（否则 ''）。"""
+        t = str(s or "")
+        for ch in ("{", "}", "-", " ", "\t"):
+            t = t.replace(ch, "")
+        t = t.strip().upper()
+        if len(t) == 32 and all(c in "0123456789ABCDEF" for c in t):
+            return t
+        return ""
+    def _norm_event_key(name):
+        """事件名 → 语义键（去 Event/Receive 前缀 + 去分隔符 + 小写）。
+
+        D-1（T-20260916-UE5AUTO-HALLBEACON-D1D4-FIX）关键：本地化标题候选
+        必须与 ev_name **同键**才算语义对应。旧实现无条件把全部事件的本地化
+        标题塞进候选 → 建 ReceiveActorEndOverlap 时被无关的「事件Actor开始
+        重叠」命中 → 误判 exists → **静默漏建**（P5 实测踩中）。
+        """
+        s = str(name or "").strip().lower().replace("_", "").replace(" ", "")
+        for _p in ("event", "receive"):
+            if s.startswith(_p):
+                s = s[len(_p):]
+        return s
+
+
+    def _fn_name_hints(fname):
+        """函数名候选（诊断用）：原名 / 去 K2_ 前缀 / 加 K2_ 前缀（去重保序）。
+
+        D-3（T-20260916-UE5AUTO-HALLBEACON-D1D4-FIX）：DLL 建函数节点返回 None
+        时必须给出可读候选。依据（P5 在线实测）：UE5.1《AActor》真实函数名为
+        `SetActorHiddenInGame`，`K2_` 前缀仅用于**重载冲突**函数
+        （如 `K2_SetActorLocation`）→ 传 `K2_SetActorHiddenInGame` 必然失败。
+        """
+        s = str(fname or "").strip()
+        if not s:
+            return []
+        _out = [s]
+        _alt = s[3:] if s.startswith('K2_') else ('K2_' + s)
+        if _alt and _alt not in _out:
+            _out.append(_alt)
+        return _out
+
+
+
+    def _locate_node_strict(graph, ref):
+        """GUID 优先 → 同名 fail-loud 定位节点 → (node|None, matched_by, matched_title, err)。
+
+        matched_title = 回读表里的**真实标题**（GUID 入参时由 list_nodes 反查）——
+        拓扑校验必须用它比对（K2Node 对象上取不到 node_title，拿 GUID 比对会假阴性）。
+        err 非空 = 调用方必须放弃该条连线（不得降级为「随便挑一个」）。
+        """
+        BPB = unreal.BlueprintPythonBridge
+        raw = str(ref or "").strip()
+        if not raw:
+            return None, "", "", "节点不存在: <空参数>（需给节点标题或 32 位 GUID）"
+
+        # 路径 A：GUID 精确（同名场景唯一可靠锚点）
+        guid = _norm_guid_ref(raw)
+        if guid:
+            n = None
+            try:
+                n = BPB.get_node_by_guid(graph, guid)
+            except Exception:
+                n = None
+            if n is None:
+                return None, "", "", "节点不存在（GUID 未命中）: " + raw
+            _t = ""
+            try:
+                for _i in (BPB.list_nodes(graph) or []):
+                    _gi = str(getattr(_i, "node_guid", "") or "").upper()
+                    for _ch in ("{", "}", "-", " "):
+                        _gi = _gi.replace(_ch, "")
+                    if _gi == guid:
+                        _t = str(getattr(_i, "node_title", "") or "")
+                        break
+            except Exception:
+                _t = ""
+            if not _t:
+                _t = str(getattr(n, "node_title", "") or "")
+            return n, "guid", _t, ""
+
+        # 路径 B：标题计数（同名 > 1 → fail-loud）
+        matches = None
+        try:
+            infos = BPB.list_nodes(graph) or []
+            matches = [i for i in infos
+                       if str(getattr(i, "node_title", "") or "") == raw]
+        except Exception:
+            matches = None
+        if matches is None:
+            # 回读通道不可用（list_nodes 异常）→ 退回唯一标题查找（不新增失败面）
+            n = BPB.find_node_by_title(graph, raw)
+            if n is None:
+                return None, "", "", "节点不存在: " + raw
+            return n, "title", raw, ""
+        if len(matches) == 0:
+            return None, "", "", "节点不存在: " + raw
+        if len(matches) > 1:
+            dups = [str(getattr(i, "node_guid", "") or "<GUID不可读>") for i in matches]
+            return None, "", "", (
+                "节点标题歧义，拒绝执行: 「%s」在图中命中 %d 个同名节点 → "
+                "按标题连线会连错目标且无法确定意图，请改用 GUID 精确指定。"
+                "同名节点清单: %s" % (raw, len(matches), dups))
+        info = matches[0]
+        _g = str(getattr(info, "node_guid", "") or "")
+        n = None
+        if _g:
+            try:
+                n = BPB.get_node_by_guid(graph, _g)
+            except Exception:
+                n = None
+        if n is None:
+            n = BPB.find_node_by_title(graph, raw)
+        if n is None:
+            return None, "", "", "节点不存在: " + raw
+        return n, "title", (str(getattr(info, "node_title", "") or "") or raw), ""
+
+
+    try:
+        with open(_spec_file, 'r', encoding='utf-8') as f:
+            spec = json.load(f)
+
+        bp_path = spec['blueprint_path']
+        bp = unreal.EditorAssetLibrary.load_asset(bp_path)
+        if not bp:
+            raise Exception('Failed to load blueprint: ' + bp_path)
+
+        graph = unreal.BlueprintPythonBridge.get_event_graph(bp)
+        if not graph:
+            raise Exception('Failed to get EventGraph for: ' + bp_path)
+
+        # ── 事件节点 ──
+        # D-5（T-20260917-D5D6-CONTRACT-FIX）：`event_name` = 主字段，`name` = 兼容别名。
+        #   bridge 侧 `/build` 已归一化；此处**再兜一层** —— 直接写 spec 文件（绕过
+        #   /build 归一化）时同样兼容。两者**都缺/为空** → fail-loud：错误点名
+        #   `events[i]` + 回传实收 keys，⛔ 绝不落到 `add_event:`（**空事件名**）
+        #   + `add_event_node returned None`（指不到根因字段）的旧报错。
+        for _ev_idx, ev in enumerate(spec.get('events', [])):
+            if not isinstance(ev, dict):
+                result['steps'].append({
+                    'step': 'add_event:[events[%d]]' % _ev_idx,
+                    'status': 'error',
+                    'error': ('events[%d] 类型错误：应为对象（dict），实收 %s'
+                              % (_ev_idx, type(ev).__name__)),
+                })
+                result['success'] = False
+                continue
+            _ev_primary = str(ev.get('event_name') or '').strip()
+            _ev_alias = str(ev.get('name') or '').strip()
+            if _ev_primary and _ev_alias and _ev_primary != _ev_alias:
+                result.setdefault('warnings', []).append(
+                    '【D-5】events[%d] 同时提供 name=%r 与 event_name=%r 且值不同 → '
+                    '取 event_name=%r' % (_ev_idx, _ev_alias, _ev_primary, _ev_primary))
+            ev_name = _ev_primary or _ev_alias
+            if not ev_name:
+                result['steps'].append({
+                    'step': 'add_event:[events[%d]]' % _ev_idx,
+                    'status': 'error',
+                    'error': ('events[%d] 缺少事件名（请提供 event_name）：实际收到的 keys=%s'
+                              % (_ev_idx, sorted(ev.keys()))),
+                })
+                result['success'] = False
+                continue
+            try:
+                # T-20260820-VERIFY-RUN-FIX（实测暴露）：existing 检查必须兼容本地化标题。
+                # create_actor_blueprint 已默认创建 BeginPlay/ActorBeginOverlap/Tick 事件，
+                # 但节点标题是本地化中文（事件开始运行/事件Actor开始重叠/事件Tick），
+                # 用英文标题 find_node_by_title 查不到 → 重复添加 → 编译报
+                # 「找到了多个同命名为 ReceiveBeginPlay 的函数」Status=2。
+                _event_title_candidates = [ev_name]
+                # ── D-1（T-20260916-UE5AUTO-HALLBEACON-D1D4-FIX · 根因修复）──────
+                #   旧实现 `for _title in _localized_map.values(): append(_title)`
+                #   把**全部**事件的本地化标题**无条件**塞进候选 → 候选与 ev_name
+                #   无语义绑定 → 建 ReceiveActorEndOverlap 时被脚手架自带的
+                #   「事件Actor开始重叠」命中 → 误判 exists → **静默漏建**
+                #   （不报错、不写 steps 失败 → 交付物「编译通过但行为缺失」）。
+                #   修法：候选只保留**与 ev_name 语义对应**的本地化标题
+                #   （`_norm_event_key` 归一化后同键才纳入），并补齐 map 缺口
+                #   （BeginOverlap / EndOverlap / Tick / Destroyed 的 Receive 变体）。
+                _localized_map = {
+                    'BeginPlay': '事件开始运行',
+                    'Event BeginPlay': '事件开始运行',
+                    'ReceiveBeginPlay': '事件开始运行',
+                    'ActorBeginOverlap': '事件Actor开始重叠',
+                    'Event ActorBeginOverlap': '事件Actor开始重叠',
+                    'ReceiveActorBeginOverlap': '事件Actor开始重叠',
+                    'ActorEndOverlap': '事件Actor结束重叠',
+                    'Event ActorEndOverlap': '事件Actor结束重叠',
+                    'ReceiveActorEndOverlap': '事件Actor结束重叠',
+                    'Tick': '事件Tick',
+                    'Event Tick': '事件Tick',
+                    'ReceiveTick': '事件Tick',
+                    'Destroyed': '事件销毁',
+                    'Event Destroyed': '事件销毁',
+                    'ReceiveDestroyed': '事件销毁',
+                }
+                _ev_norm = _norm_event_key(ev_name)
+                for _map_key, _map_title in _localized_map.items():
+                    if _norm_event_key(_map_key) != _ev_norm:
+                        continue     # ← D-1：非本事件的本地化标题，绝不入候选
+                    if _map_title not in _event_title_candidates:
+                        _event_title_candidates.append(_map_title)
+                _existing_node = None
+                _existing_by = ""
+                _existing_title = ""
+                _title_conflict = ""
+                for _cand in _event_title_candidates:
+                    # F-3：存在性判定改 GUID 语义 —— **确切存在**才跳过创建；
+                    #   同名歧义 → 报错（不静默跳过、不静默误判「已存在」）。
+                    _cand_node, _cand_by, _cand_mt, _cand_err = _locate_node_strict(graph, _cand)
+                    if _cand_err.startswith("节点标题歧义"):
+                        _title_conflict = _cand_err
+                        break
+                    if _cand_node is not None:
+                        _existing_node = _cand_node
+                        _existing_by = _cand_by
+                        _existing_title = _cand_mt
+                        break
+                if _title_conflict:
+                    result['steps'].append({
+                        'step': 'add_event:' + ev_name,
+                        'status': 'error',
+                        'error': _title_conflict
+                    })
+                    result['success'] = False
+                elif _existing_node:
+                    # D-1 可审计：回传命中依据（matched_by / matched_title /
+                    #   candidates）——杜绝「标题集合瞎命中」再次静默误判。
+                    result['steps'].append({
+                        'step': 'add_event:' + ev_name,
+                        'status': 'exists',
+                        'matched_by': _existing_by,
+                        'matched_title': _existing_title,
+                        'candidates': _event_title_candidates,
+                    })
+                else:
+                    # T-20260820-VERIFY-RUN-FIX（实测暴露）：DLL AddEventNode(graph, event_name)
+                    # 第一个参数是 EdGraph，不是 Blueprint；模板此前传 bp → Nativize 报错。
+                    # 另有：Actor 蓝图的事件函数名是 ReceiveBeginPlay（非 BeginPlay），
+                    #       传 'BeginPlay' 时 DLL 返回 None。做一次友好映射。
+                    _ue_event_name = ev_name
+                    if ev_name in ('BeginPlay', 'Event BeginPlay'):
+                        _ue_event_name = 'ReceiveBeginPlay'
+                    node = unreal.BlueprintPythonBridge.add_event_node(graph, _ue_event_name,
+                        int(ev.get('pos', [0, 0])[0]), int(ev.get('pos', [0, 0])[1]))
+                    if node:
+                        if ev.get('b_override', True) and hasattr(node, 'bOverrideFunction'):
+                            node.bOverrideFunction = True
+                        result['steps'].append({
+                            'step': 'add_event:' + ev_name,
+                            'status': 'ok'
+                        })
+                    else:
+                        result['steps'].append({
+                            'step': 'add_event:' + ev_name,
+                            'status': 'error',
+                            'error': 'add_event_node returned None'
+                        })
+                        result['success'] = False
+            except Exception as e:
+                result['steps'].append({
+                    'step': 'add_event:' + ev_name,
+                    'status': 'error',
+                    'error': str(e)
+                })
+                result['success'] = False
+
+        # ── 函数节点 ──
+        for _fn_idx, fn in enumerate(spec.get('functions', [])):
+            # ── D-8（T-20260917-D8-FUNCTIONS-CONTRACT）：字段名双层兼容 ──
+            #   `function_name` = **主字段**；`name` = **兼容别名**（等价可用）。
+            #   `function_path` = 主字段；缺省时由 `target_class` + 函数名推导
+            #   （`<target_class>:<函数名>`）；只给 path → 由末段反推函数名。
+            #   冲突取主字段；两者皆缺且无 path → fail-loud（点名 `functions[i]`
+            #   + 实收 keys），**不再**落到「空函数名 + add_function_node
+            #   returned None」这种指不到根因字段的报错。
+            #   （bridge 侧已归一化，此处再兜一层：模板被直接调用时同样可用。）
+            if not isinstance(fn, dict):
+                result['steps'].append({
+                    'step': 'add_function:[functions[%d]]' % _fn_idx,
+                    'status': 'error',
+                    'error': ('functions[%d] 类型错误：应为对象（dict），实收 %s'
+                              % (_fn_idx, type(fn).__name__)),
+                })
+                result['success'] = False
+                continue
+            _fn_primary = str(fn.get('function_name') or '').strip()
+            _fn_alias = str(fn.get('name') or '').strip()
+            if _fn_primary and _fn_alias and _fn_primary != _fn_alias:
+                result.setdefault('warnings', []).append(
+                    '【D-8】functions[%d] 同时提供 name=%r 与 function_name=%r 且值不同 → '
+                    '取 function_name=%r' % (_fn_idx, _fn_alias, _fn_primary, _fn_primary))
+            fn_name = _fn_primary or _fn_alias
+            fn_path = str(fn.get('function_path') or '').strip()
+            if not fn_path:
+                _fn_tc = str(fn.get('target_class') or '').strip()
+                if _fn_tc and fn_name:
+                    fn_path = _fn_tc + ':' + fn_name
+            if not fn_name and fn_path:
+                fn_name = fn_path.rpartition(':')[2].strip()
+            if not fn_name:
+                result['steps'].append({
+                    'step': 'add_function:[functions[%d]]' % _fn_idx,
+                    'status': 'error',
+                    'error': ('functions[%d] 缺少函数名（请提供 function_name）：实际收到的 keys=%s'
+                              % (_fn_idx, sorted(fn.keys()))),
+                })
+                result['success'] = False
+                continue
+            try:
+                if fn_path:
+                    # T-20260820-VERIFY-RUN-FIX（实测暴露）：DLL 签名
+                    # add_function_call_node(graph, function_name, target_class_name, pos_x, pos_y)，
+                    # 需按最后一个 ':' 拆分为 target_class_name + function_name（对齐 A'
+                    # 修复 _cmd_add_function_node 的拆参逻辑）。
+                    target_class_name, _, function_name = fn_path.rpartition(":")
+                    _diag_fn, _diag_cls = function_name, target_class_name
+                    if not target_class_name or not function_name:
+                        raise Exception('function_path 格式错误（应为 类路径:函数名）: ' + fn_path)
+                    node = unreal.BlueprintPythonBridge.add_function_call_node(
+                        graph, function_name, target_class_name,
+                        int(fn.get('pos', [0, 0])[0]), int(fn.get('pos', [0, 0])[1])
+                    )
+                else:
+                    _diag_fn = fn_name
+                    _diag_cls = ""
+                    node = unreal.BlueprintPythonBridge.add_function_node(graph, fn_name)
+
+                # E-12（v2.20）：候选名确定性重试（GetActorLocation → K2_GetActorLocation
+                #   等反射别名场景），换名成功回传 warnings 显式记录（不静默）。
+                _alt_warning = ""
+                if node is None:
+                    BPB_GT = unreal.BlueprintPythonBridge
+                    for _cand in _fn_name_hints(fn_name)[1:]:
+                        try:
+                            if fn_path:
+                                node = BPB_GT.add_function_call_node(
+                                    graph, _cand, target_class_name,
+                                    int(fn.get('pos', [0, 0])[0]), int(fn.get('pos', [0, 0])[1]))
+                            else:
+                                node = BPB_GT.add_function_node(graph, _cand)
+                        except Exception:
+                            node = None
+                        if node is not None:
+                            _alt_warning = ('函数名 %r 在 %s 反射中不可解析 → 已自动改用候选 %r 建节点'
+                                            % (fn_name, target_class_name or '<当前蓝图>', _cand))
+                            result.setdefault('warnings', []).append(_alt_warning)
+                            break
+
+                if node:
+                    # T-20260820-VERIFY-RUN-FIX：DLL add_function_call_node 已接受 pos_x/pos_y
+                    # 参数并设置位置；K2Node 对象无 pos_x/pos_y 属性，此处不再重复赋值。
+                    # 设置引脚默认值
+                    for pin_name, pin_val in fn.get('defaults', {}).items():
+                        try:
+                            unreal.BlueprintPythonBridge.set_pin_default_value(node, pin_name, str(pin_val))
+                        except Exception:
+                            pass
+                    result['steps'].append({
+                        'step': 'add_function:' + fn_name,
+                        'status': 'ok'
+                    })
+                else:
+                    result['steps'].append({
+                        'step': 'add_function:' + fn_name,
+                        'status': 'error',
+                        'error': ('add_function_node returned None' + '（DLL 未建出节点）: 类=%s · 函数=%s · 函数名候选=%s；常见原因：' % (_diag_cls, _diag_fn, _fn_name_hints(_diag_fn)) + '① 函数名不存在（K2_ 前缀仅用于重载冲突函数）② 该类不含此函数 ' + '③ 非 UFUNCTION（缺 BlueprintCallable）④ 类路径拼写/大小写错误')
+                    })
+                    result['success'] = False
+            except Exception as e:
+                result['steps'].append({
+                    'step': 'add_function:' + fn_name,
+                    'status': 'error',
+                    'error': str(e)
+                })
+                result['success'] = False
+
+        # ── 连线（三重验证）──
+        for conn in spec.get('connections', []):
+            src_node_name = conn.get('src_node', '')
+            src_pin_name = conn.get('src_pin', '')
+            dst_node_name = conn.get('dst_node', '')
+            dst_pin_name = conn.get('dst_pin', '')
+            conn_key = f"{src_node_name}.{src_pin_name} -> {dst_node_name}.{dst_pin_name}"
+
+            try:
+                # F-2：GUID 优先 → 同名 fail-loud（绝不静默连错线）
+                src_node, _src_by, _src_mt, _src_err = _locate_node_strict(graph, src_node_name)
+                if src_node is None:
+                    result['steps'].append({
+                        'step': 'connect:' + conn_key,
+                        'status': 'error',
+                        'error': _src_err or ('source node not found: ' + src_node_name)
+                    })
+                    result['success'] = False
+                    continue
+
+                dst_node, _dst_by, _dst_mt, _dst_err = _locate_node_strict(graph, dst_node_name)
+                if dst_node is None:
+                    result['steps'].append({
+                        'step': 'connect:' + conn_key,
+                        'status': 'error',
+                        'error': _dst_err or ('dest node not found: ' + dst_node_name)
+                    })
+                    result['success'] = False
+                    continue
+                # 拓扑校验用**真实回读标题**（GUID 入参时拿 GUID 比对会假阴性）
+                _src_title = _src_mt or src_node_name
+                _dst_title = _dst_mt or dst_node_name
+
+                # ① ConnectPins
+                ok = unreal.BlueprintPythonBridge.connect_pins(src_node, src_pin_name, dst_node, dst_pin_name)
+
+                # ② 验证：get_node_connections 拓扑确认
+                verified = False
+                try:
+                    all_conns = unreal.BlueprintPythonBridge.get_node_connections(graph)
+                    if all_conns:
+                        for c in all_conns:
+                            if (str(c.from_node_title) == _src_title and
+                                str(c.from_pin_name) == src_pin_name and
+                                str(c.to_node_title) == _dst_title and
+                                str(c.to_pin_name) == dst_pin_name):
+                                verified = True
+                                break
+                except Exception:
+                    pass
+
+                if verified:
+                    result['steps'].append({
+                        'step': 'connect:' + conn_key,
+                        'status': 'ok'
+                    })
+                else:
+                    result['steps'].append({
+                        'step': 'connect:' + conn_key,
+                        'status': 'error',
+                        'error': 'connection not verified in topology'
+                    })
+                    result['success'] = False
+            except Exception as e:
+                result['steps'].append({
+                    'step': 'connect:' + conn_key,
+                    'status': 'error',
+                    'error': str(e)
+                })
+                result['success'] = False
+
+        # ── 编译 ──
+        if spec.get('compile_after', True):
+            try:
+                # v2.20 修复（返回值说谎族）：CompileBlueprint 返回 bool（编译成功 True /
+                # 失败 False，.h L128）。旧实现忽略返回值、无条件记 step ok →
+                # /build 把编译失败报成 success=true + compile_status=BS_UpToDate。
+                # 现按返回值定论：False → step error + success=False（fail-loud）。
+                _compile_ok = unreal.BlueprintPythonBridge.compile_blueprint(bp)
+                if _compile_ok:
+                    result['steps'].append({'step': 'compile', 'status': 'ok'})
+                else:
+                    result['steps'].append({
+                        'step': 'compile',
+                        'status': 'error',
+                        'error': ('compile_blueprint returned False（引擎侧编译失败，'
+                                  '蓝图 Status=BS_Error）。可用 /command compile_blueprint '
+                                  '重查（含 error_patterns 日志扫描）或在编辑器中查看编译错误')
+                    })
+                    result['success'] = False
+            except Exception as e:
+                result['steps'].append({
+                    'step': 'compile',
+                    'status': 'error',
+                    'error': str(e)
+                })
+                result['success'] = False
+
+    except Exception as e:
+        result['success'] = False
+        result['error'] = str(e)
+        result['traceback'] = traceback.format_exc()[-1000:]
+
+    with open(_result_file, 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, default=str)
+
+
+
+_ue5_gt_main()

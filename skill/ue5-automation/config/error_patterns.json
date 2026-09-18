@@ -1,0 +1,446 @@
+{
+  "_schema": "1.0.0",
+  "_description": "UE5.1 自动化管线错误模式库 — 用于日志解析、报错诊断和自动修复匹配",
+  "_last_updated": "2026-09-17",
+  "_total_patterns": 19,
+  "_categories": {
+    "reference_lost": "引用丢失",
+    "compile_error": "编译错误",
+    "circular_dependency": "循环依赖",
+    "interface_mismatch": "接口不匹配",
+    "node_error": "蓝图节点错误",
+    "performance_warning": "性能告警",
+    "silent_failure": "静默失败",
+    "gc_issue": "GC/引用管理",
+    "api_usage": "API 使用错误",
+    "runtime_error": "运行时错误"
+  },
+  "_severity_levels": {
+    "critical": "阻断级 — 蓝图不可用，必须立即修复",
+    "error": "错误级 — 功能异常，优先修复",
+    "warning": "警告级 — 潜在问题，建议修复",
+    "info": "提示级 — 仅供参考，无需立即处理"
+  },
+  "patterns": [
+    {
+      "id": "PTN-001",
+      "title": "AssetTools.create_asset 不注册 GeneratedClass",
+      "error_code": "E-BP-GENCLASS-NOTREGISTERED",
+      "category": "silent_failure",
+      "severity": "critical",
+      "pattern": {
+        "log_regex": "(BlueprintGeneratedClass.*invalid|GeneratedClass.*null|SpawnActor.*failed.*class|NativeParent.*mismatch)",
+        "symptom": "蓝图编译通过但运行时 BeginPlay/Tick 等事件不触发；蓝图无法拖入场景",
+        "root_cause": "使用 AssetTools.create_asset() 创建的蓝图仅生成 .uasset 文件，未注册 GeneratedClass，CDO 类型为 BlueprintGeneratedClass 而非实际的 Actor/Widget 类",
+        "detection_check": "蓝图列表中可以编译通过，但事件系统断链"
+      },
+      "auto_fix": true,
+      "fix_action": "删除旧蓝图 → 使用 create_actor_blueprint（走 FKismetEditorUtilities::CreateBlueprint 原生流程）重建",
+      "fix_code_example": "# ❌ 错误：AssetTools.create_asset\nasset_tools = unreal.AssetToolsHelpers.get_asset_tools()\nbp = asset_tools.create_asset(name, path, parent_class)\n# ✅ 正确：factory + create_actor_blueprint\nfactory = unreal.BlueprintFactory()\nfactory.set_editor_property('parent_class', unreal.Actor)\nbp = asset_tools.create_asset(name, path, unreal.Blueprint, factory)",
+      "source": "pitfalls.md · P01 · MEMORY_UE_workstation.md",
+      "related_patterns": [
+        "PTN-003",
+        "PTN-009"
+      ],
+      "known_cases": "BP_HelloMirror (2026-07-17)"
+    },
+    {
+      "id": "PTN-002",
+      "title": "add_function_call_node 需要完整类路径",
+      "error_code": "E-BP-FINDCLASS-NOTFOUND",
+      "category": "api_usage",
+      "severity": "error",
+      "pattern": {
+        "log_regex": "(FindObject.*failed|add_function_call.*returned None|function.*node.*not created|KismetSystemLibrary.*not found)",
+        "symptom": "add_function_call_node 返回 None，节点未创建，无引脚",
+        "root_cause": "BlueprintPythonBridge 的 add_function_call_node 内部调用 FindObject<UClass>(nullptr, *TargetClassName)，需要完整路径格式如 /Script/Engine.KismetSystemLibrary",
+        "detection_check": "调用后检查返回值是否为 None"
+      },
+      "auto_fix": true,
+      "fix_action": "将类名从短名替换为完整 UE 模块路径格式 /Script/<Module>.<ClassName>",
+      "fix_code_example": "# ❌ 错误：短类名\nbp.add_function_call_node('PrintString', 'KismetSystemLibrary')\n# ✅ 正确：完整路径\nbp.add_function_call_node('PrintString', '/Script/Engine.KismetSystemLibrary')",
+      "source": "pitfalls.md · P02 · BlueprintPythonBridge C++ 源码 BlueprintFunctionLibrary.cpp:252",
+      "related_patterns": [
+        "PTN-001",
+        "PTN-007"
+      ],
+      "known_cases": "BP_HelloMirror PrintString 节点创建失败 (2026-07-17)"
+    },
+    {
+      "id": "PTN-003",
+      "title": "CDO 修改在编译前执行导致覆盖",
+      "error_code": "E-BP-CDO-OVERWRITTEN",
+      "category": "silent_failure",
+      "severity": "critical",
+      "pattern": {
+        "log_regex": "(CDO.*overwritten|CDO.*reset|class default object.*mismatch|default.*property.*lost)",
+        "symptom": "编译后 CDO 默认值被重置；BeginPlay 中设置的 Tick 无效；构造脚本中设置的值编译后丢失",
+        "root_cause": "编译蓝图时 CDO 会重建，覆盖之前通过 set_editor_property 设置的值。必须先 CompileBlueprint 再修改 CDO",
+        "detection_check": "修改 CDO 后编译 → 检查 CDO 值是否保持"
+      },
+      "auto_fix": true,
+      "fix_action": "调整时序：先 compile_blueprint()，再修改 CDO 属性",
+      "fix_code_example": "# ❌ 错误：先改 CDO 再编译\nbp.set_editor_property('bCanEverTick', True)\nbp.compile_blueprint()  # CDO 被覆盖！\n# ✅ 正确：先编译再改 CDO\nbp.compile_blueprint()\ngenerated_class = bp.get_editor_property('generated_class')\ncdo = generated_class.get_default_object()\ncdo.set_editor_property('bCanEverTick', True)",
+      "source": "pitfalls.md · P03 · UE_Gameplay_Framework_踩坑对照",
+      "related_patterns": [
+        "PTN-001",
+        "PTN-009"
+      ],
+      "known_cases": "BeginPlay 设置 Tick 无效 (2026-07-17)"
+    },
+    {
+      "id": "PTN-004",
+      "title": "ConnectPins 假阳性 — 报告成功但实际未连接",
+      "error_code": "E-BP-CONNECT-FALSE-POSITIVE",
+      "category": "silent_failure",
+      "severity": "error",
+      "pattern": {
+        "log_regex": "(pin.*not.*connected|connect.*returned.*false|connection.*not.*established|is_connected.*false)",
+        "symptom": "connect_pins 返回 True 但蓝图编辑器中节点未连接",
+        "root_cause": "Bridge C++ 侧 ConnectPins 函数未对连接结果做二次验证，仅检查了 Pin 对象有效性",
+        "detection_check": "connect_pins 后立即 list_pins → 检查连线是否真正建立"
+      },
+      "auto_fix": false,
+      "fix_action": "connect_pins 后立即调用 list_pins 验证；实现时加二次确认逻辑",
+      "fix_code_example": "# 验证模式\nresult = bp.connect_pins(eg, 'BeginPlay', 'then', 'PrintString', 'execute')\npins = bp.list_pins(eg, 'PrintString')\nassert pins['execute'].get('connected', False), 'connect_pins 假阳性！'",
+      "source": "pitfalls.md · P04 · SafeWrapper 审计复盘",
+      "related_patterns": [
+        "PTN-007"
+      ],
+      "known_cases": "BP_HelloMirror BeginPlay→PrintString 假连接"
+    },
+    {
+      "id": "PTN-005",
+      "title": "Python 端节点引用跨调用丢失 (GC 回收)",
+      "error_code": "E-BP-PYREF-GC-LOST",
+      "category": "gc_issue",
+      "severity": "critical",
+      "pattern": {
+        "log_regex": "(NoneType|has no attribute|object has been collected)",
+        "symptom": "第一次 ue_send.py 调用创建的节点引用，第二次调用时变为 None",
+        "root_cause": "Python 端创建的 UObject 引用无 UPROPERTY 保护，未注册到 UE GC 追踪系统",
+        "detection_check": "所有创建+连线必须在一次 ue_send.py 调用中完成"
+      },
+      "auto_fix": true,
+      "fix_action": "将所有创建、连线、验证操作合并到单次 ue_send.py 调用中",
+      "fix_code_example": "# ✅ 正确：单次调用完成所有操作\nscript = '''\neg = bp.get_event_graph()\nbegin = bp.add_event_node(eg, 'BeginPlay')\nps = bp.add_function_call_node('PrintString', '/Script/Engine.KismetSystemLibrary')\nbp.connect_pins(eg, 'BeginPlay', 'then', 'PrintString', 'execute')\nbp.compile_blueprint()\n'''",
+      "source": "pitfalls.md · P05 · UE_Gameplay_Framework_GC踩坑",
+      "related_patterns": [
+        "PTN-006"
+      ],
+      "known_cases": "跨 ue_send.py 调用引用丢失"
+    },
+    {
+      "id": "PTN-006",
+      "title": "成员指针无 UPROPERTY 保护导致 GC 野指针",
+      "error_code": "E-GC-UPROPERTY-MISSING",
+      "category": "gc_issue",
+      "severity": "critical",
+      "pattern": {
+        "log_regex": "(Access violation|EXCEPTION_ACCESS_VIOLATION|pending kill)",
+        "symptom": "运行时随机崩溃（Access Violation 0x00000000…）",
+        "root_cause": "C++ 成员变量 UObject* 指针或 TArray<UObject*> 未加 UPROPERTY() 宏",
+        "detection_check": "检查蓝图关联的 C++ 类成员是否有 UPROPERTY 宏"
+      },
+      "auto_fix": false,
+      "fix_action": "所有 UObject* 成员必须加 UPROPERTY() 宏",
+      "fix_code_example": "// ❌ 错误：无 UPROPERTY\nUMyActor* TargetActor;\nTArray<UObject*> Objects;\n// ✅ 正确\nUPROPERTY()\nTObjectPtr<UMyActor> TargetActor;\nUPROPERTY()\nTArray<TObjectPtr<UObject>> Objects;",
+      "source": "pitfalls.md · P06 · UE_Gameplay_Framework_GC版错题",
+      "related_patterns": [
+        "PTN-005"
+      ],
+      "known_cases": "Python 创建的蓝图节点引用丢失 → GC 回收"
+    },
+    {
+      "id": "PTN-007",
+      "title": "引脚名猜测导致 connect_pins 失败",
+      "error_code": "E-BP-PIN-NAME-MISMATCH",
+      "category": "api_usage",
+      "severity": "error",
+      "pattern": {
+        "log_regex": "(pin.*not found|could not find pin|Invalid pin name)",
+        "symptom": "connect_pins 报 'pin not found'；实际引脚名与预期不符",
+        "root_cause": "引脚名因 UE 版本/蓝图类型而异。纯函数无 exec 引脚",
+        "detection_check": "连线前必须 list_pins(node) 确认所有引脚名"
+      },
+      "auto_fix": false,
+      "fix_action": "连线前强制调用 list_pins 获取实际引脚名",
+      "fix_code_example": "# ✅ 安全流程\npins = bp.list_pins(eg, 'PrintString')\nprint(pins)  # 确认实际引脚名\n# 然后根据实际名称连线",
+      "source": "pitfalls.md · P07 · MEMORY_UE_workstation.md 连线铁律",
+      "related_patterns": [
+        "PTN-004",
+        "PTN-002"
+      ],
+      "known_cases": "纯函数节点误接 exec 引脚"
+    },
+    {
+      "id": "PTN-008",
+      "title": "批量操作失败后半成品蓝图残留",
+      "error_code": "E-BP-ORPHAN-BLUEPRINT",
+      "category": "silent_failure",
+      "severity": "warning",
+      "pattern": {
+        "log_regex": "(batch.*fail|partial.*success|incomplete.*blueprint)",
+        "symptom": "批量创建蓝图时部分失败，成功创建的一半蓝图留在 Content Browser 中",
+        "root_cause": "SafeWrapper 批量模式无事务机制。失败后未执行 _cleanup_orphan_blueprint()",
+        "detection_check": "批量操作后比对预期蓝图数与实际创建数"
+      },
+      "auto_fix": true,
+      "fix_action": "SafeWrapper 集成 _cleanup_orphan_blueprint() 自动清理",
+      "fix_code_example": "from safe_batch import SafeBatchExecutor\nexecutor = SafeBatchExecutor()\ntry:\n    results = executor.execute_batch(blueprint_specs)\nfinally:\n    executor.cleanup_orphans()",
+      "source": "pitfalls.md · P08 · SafeWrapper 审计 WARN D5",
+      "related_patterns": [
+        "PTN-014"
+      ],
+      "known_cases": "批量编译失败后半成品蓝图残留"
+    },
+    {
+      "id": "PTN-009",
+      "title": "蓝图编译失败 — 变量类型未找到",
+      "error_code": "E-BP-COMPILE-TYPE-NOTFOUND",
+      "category": "compile_error",
+      "severity": "error",
+      "pattern": {
+        "log_regex": "LogBlueprint:\\s*Error:.*Variable\\s*'(\\w+)'.*type\\s*'(\\S+)'\\s*not found",
+        "symptom": "蓝图编译报错：Variable 'XXX' type 'TArray<FXXX>' not found",
+        "root_cause": "蓝图引用的结构体/枚举/类未在 Content Browser 中正确保存或路径变更",
+        "detail_example": "BP_InventoryWidget: Variable 'ItemList' type 'TArray<FInventoryItem>' not found"
+      },
+      "auto_fix": false,
+      "fix_action": "检查 Content Browser 中对应结构体是否存在；存在则 Refresh Node；不存在则重建",
+      "fix_manual_steps": [
+        "1. 打开 Content Browser，搜索变量类型名",
+        "2. 存在 → 右键蓝图 → Refresh All Nodes",
+        "3. 不存在 → 创建 Structure 资产，添加所需字段",
+        "4. 重新编译蓝图"
+      ],
+      "source": "SKILL.md · 模块三示例3 · UE 编译日志",
+      "related_patterns": [
+        "PTN-011"
+      ],
+      "known_cases": "BP_InventoryWidget 编译日志 (SKILL.md 示例)"
+    },
+    {
+      "id": "PTN-010",
+      "title": "引用资产丢失 — Referenced asset is null",
+      "error_code": "E-BP-REF-NULL-ASSET",
+      "category": "reference_lost",
+      "severity": "critical",
+      "pattern": {
+        "log_regex": "(Referenced asset is null|Failed to load.*asset|Missing Asset|can't find file)",
+        "symptom": "蓝图节点上引用资产显示为空；日志报 'Referenced asset is null'",
+        "root_cause": "资产路径变更、资产被移动/删除/重命名、软引用未正确解析",
+        "detail_example": "BP_Enemy 中引用的 BehaviorTree BT_PatrolBehavior_v1 已被重命名为 BT_PatrolBehavior_v2"
+      },
+      "auto_fix": true,
+      "fix_action": "扫描 Content Browser 中匹配名称的资产 → 自动替换路径；若资产已删，标记为待清理",
+      "fix_code_example": "# 自动修复引用路径\nimport unreal\nreg = unreal.AssetRegistryHelpers.get_asset_registry()\ncandidates = reg.get_assets_by_class('BehaviorTree', search_sub_classes=True)\n# 自动选择最匹配的（基于名称编辑距离）",
+      "source": "SKILL.md · 模块三 · 引用丢失类",
+      "related_patterns": [
+        "PTN-012"
+      ],
+      "known_cases": "BT_PatrolBehavior 引用断裂 (SKILL.md 示例1)"
+    },
+    {
+      "id": "PTN-011",
+      "title": "接口函数未实现 — Interface function not implemented",
+      "error_code": "E-BP-COMPILE-IFACE-MISSING",
+      "category": "interface_mismatch",
+      "severity": "error",
+      "pattern": {
+        "log_regex": "LogBlueprint:\\s*Error:.*Interface.*function\\s*'(\\w+)'\\s*not implemented",
+        "symptom": "蓝图实现了接口但缺少某个接口函数的实现，编译报错",
+        "root_cause": "蓝图声明实现某 Interface，但蓝图事件图中缺少对应的 Function Override 节点"
+      },
+      "auto_fix": true,
+      "fix_action": "自动在蓝图事件图中添加缺失接口函数的 Function Override 节点 + 空实现",
+      "fix_code_example": "# 自动补全接口函数\nbp_interface = unreal.load_asset(interface_path)\nfor func in bp_interface.get_functions():\n    if not bp.has_function_override(func.get_name()):\n        bp.add_function_override(func.get_name())",
+      "source": "SKILL.md · 模块三 · 接口不匹配类",
+      "related_patterns": [
+        "PTN-009"
+      ],
+      "known_cases": "BlueprintInterface 升级后旧蓝图缺少新函数"
+    },
+    {
+      "id": "PTN-012",
+      "title": "循环依赖 — 蓝图 A ↔ B 相互引用",
+      "error_code": "E-BP-CIRCULAR-DEPENDENCY",
+      "category": "circular_dependency",
+      "severity": "critical",
+      "pattern": {
+        "log_regex": "(circular dependency|cyclic reference|dependency loop)",
+        "symptom": "两个或多个蓝图相互 Cast / SpawnActor / 硬引用，形成依赖环",
+        "root_cause": "蓝图 A 引用 B 的同时 B 也引用 A（或通过中间蓝图形成环）",
+        "detection_check": "遍历蓝图引用图 → 拓扑排序 → 检测环路"
+      },
+      "auto_fix": false,
+      "fix_action": "打破循环：① 用 Interface 替代直接 Cast；② 用 Event Dispatcher 替代直接函数调用；③ 抽取公共依赖到第三个蓝图 (Mediator)",
+      "fix_manual_steps": [
+        "1. 确定环上所有蓝图",
+        "2. 选择断开最弱的边（通常是 Cast 关系）",
+        "3. 用 Interface (BPI_XXX) 替代 Cast",
+        "4. 或引入中间 Managers/Subsystems"
+      ],
+      "source": "SKILL.md · 模块三 · 循环依赖类 · 22条铁律#6",
+      "related_patterns": [
+        "PTN-013"
+      ],
+      "known_cases": "BP_GameMode ↔ BP_PlayerController 相互引用"
+    },
+    {
+      "id": "PTN-013",
+      "title": "Tick 耗时过长 — 性能告警",
+      "error_code": "E-BP-PERF-TICK-HEAVY",
+      "category": "performance_warning",
+      "severity": "warning",
+      "pattern": {
+        "log_regex": "LogBlueprintUserMessages:.*\\[.*\\].*or stat",
+        "symptom": "帧率下降、蓝图 Tick 中执行重计算",
+        "root_cause": "Tick 中执行 O(n) 或更重的操作；未用 Timer 替代高频 Tick",
+        "detail_example": "BP_GameMode 包含 312 个节点 → 建议拆分为 Manager 子类"
+      },
+      "auto_fix": false,
+      "fix_action": "将重计算移出 Tick → 用 Timer/Event 驱动；对大数据量用 ParallelFor 或 AsyncTask",
+      "fix_manual_steps": [
+        "1. 用 stat unit / stat game 定位卡顿来源蓝图",
+        "2. 评估 Tick 中的操作是否可以降低频率（Timer 替代）",
+        "3. 遍历类操作考虑空间分区（Grid/Hash）减少搜索范围",
+        "4. 非 GameThread 操作考虑 AsyncTask/ParallelFor"
+      ],
+      "source": "SKILL.md · 模块三 · 性能告警 · 22条铁律#21",
+      "related_patterns": [
+        "PTN-012"
+      ],
+      "known_cases": "BP_GameMode 312 节点 → 建议拆分 (SKILL.md 示例4)"
+    },
+    {
+      "id": "PTN-014",
+      "title": "蓝图节点已废弃 — Node deprecated",
+      "error_code": "E-BP-NODE-DEPRECATED",
+      "category": "node_error",
+      "severity": "warning",
+      "pattern": {
+        "log_regex": "(?i)(?:node|pin|function|class|property|variable|event|macro|interface).{0,60}?(?:deprecated|obsolete)|will be removed in.{0,30}?version",
+        "exclude_categories": ["LogPackageName", "LogLinker", "LogAssetRegistry", "LogTemp"],
+        "symptom": "蓝图编译/打开时警告：某个节点已废弃，建议使用新 API 替换",
+        "root_cause": "UE 引擎版本升级后部分蓝图节点/数据类型被标记为 Deprecated"
+      },
+      "auto_fix": false,
+      "fix_action": "识别废弃节点类型 → 查找替代 API → 输出替换建议（自动替换需人工确认）",
+      "fix_manual_steps": [
+        "1. 定位废弃节点（编译日志会给出节点名+位置）",
+        "2. 查阅 UE 文档/Release Notes 找到替代节点",
+        "3. 手动替换节点并重新连线"
+      ],
+      "source": "SKILL.md · 模块三 · 蓝图节点错误 · UE 版本兼容",
+      "related_patterns": [
+        "PTN-008"
+      ],
+      "known_cases": "Cast 节点在 UE5.1 部分路径废弃、数学节点迁移"
+    },
+    {
+      "id": "PTN-015",
+      "title": "BlueprintPythonBridge clear_graph_nodes 残留引用",
+      "error_code": "E-BP-CLEARGRAPH-ORPHAN",
+      "category": "api_usage",
+      "severity": "error",
+      "pattern": {
+        "log_regex": "(orphan.*node|dangling.*pin|node.*still.*referenced|graph.*not.*empty|DestroyNode.*not.*called)",
+        "symptom": "clear_graph_nodes 后旧节点的引脚引用未释放；新节点创建时引脚冲突/连接异常",
+        "root_cause": "clear_graph_nodes 内部未调用 DestroyNode()，仅从数组中移除节点引用但未通知 UE 编辑器节点已销毁",
+        "detection_check": "clear_graph_nodes 后 list_nodes → 确认图已清空（0 节点）"
+      },
+      "auto_fix": true,
+      "fix_action": "C++ 侧修复：clear_graph_nodes 内部对每个节点调用 DestroyNode() 再移除；Python 侧验证：clear 后 list_nodes 确认归零",
+      "fix_code_example": "// C++ 侧修复（需重建 Bridge DLL）\nvoid UBPBridge::ClearGraphNodes(UEdGraph* Graph) {\n    for (UEdGraphNode* Node : Graph->Nodes) {\n        Node->DestroyNode();  // ⚠️ 必须调用\n    }\n    Graph->Nodes.Empty();\n}",
+      "source": "pitfalls.md · P15 · BlueprintPythonBridge clear_graph_nodes 残留引用",
+      "related_patterns": [
+        "PTN-008",
+        "PTN-004"
+      ],
+      "known_cases": "clear_graph_nodes 后重建蓝图时节点遗留 (2026-07-17)"
+    },
+    {
+      "id": "PTN-016",
+      "title": "关键调用链上的功能 stub",
+      "error_code": "E-CODE-FUNCTIONAL-STUB",
+      "category": "silent_failure",
+      "severity": "critical",
+      "pattern": {
+        "log_regex": "(?i)(NotImplementedError|功能路径.{0,20}未实现|未实现路径|TODO.{0,30}(?:implement|实现)|functional.{0,10}stub)",
+        "symptom": "关键入口函数存在且可调用，但调用链末端为 {return False / pass / TODO} —— 运行到该路径时静默无输出或返回假成功",
+        "root_cause": "开发阶段预留的未实现路径直接合入生产代码，缺少显式的未完成标记（raise NotImplementedError），调用方无法感知功能缺失",
+        "detection_check": "审计每个公开 API 的调用链末端是否存在 pass / TODO / return False 空壳；建议用门禁脚本自动扫描并标记为阻断"
+      },
+      "auto_fix": false,
+      "fix_action": "① 完整实现缺失路径；② 暂不具备实现条件 → 入口处显式 raise NotImplementedError（点名功能路径 + 参见 pitfalls.md P16），⛔ 禁止静默 pass / return False",
+      "fix_code_example": "# ❌ 危险：stub 无标注\ndef _exec_embedded(self, node_data):\n    pass  # TODO — 但未被门禁检测到\n\n# ✅ 正确：显式阻断\ndef _exec_embedded(self, node_data):\n    raise NotImplementedError(\"_exec_embedded: 嵌入式节点执行路径未实现\")",
+      "source": "pitfalls.md · P16",
+      "related_patterns": [
+        "PTN-004"
+      ],
+      "known_cases": "reader.analyze() → _exec_embedded() 空壳（2026-07 代码审计发现）"
+    },
+    {
+      "id": "PTN-017",
+      "title": "/build 事件存在性判定误判 → 事件节点静默漏建",
+      "error_code": "E-BP-BUILD-EVENT-SILENT-SKIP",
+      "category": "silent_failure",
+      "severity": "critical",
+      "pattern": {
+        "log_regex": "(?i)(add_event_node returned None|事件节点未建|事件存在性|events\\[|ReceiveActorEndOverlap)",
+        "symptom": "POST /build 返回 success=true、steps 无失败项，但目标事件节点根本没建 —— 蓝图少了事件入口，编译照样通过、逻辑永不触发",
+        "root_cause": "事件存在性判定把全部事件的本地化标题无条件加入候选（_localized_map.values()），与目标 event_name 无语义绑定 → 「事件Actor开始重叠」（= ReceiveActorBeginOverlap）被当作 ReceiveActorEndOverlap 命中 → 判 exists → 静默跳过创建",
+        "detection_check": "build 后 read_nodes 回读图，核对目标事件节点实际存在；判 exists 时必须回传 matched_by / matched_title / candidates 供人工复核"
+      },
+      "auto_fix": true,
+      "fix_action": "事件存在性判定改为语义键绑定（_norm_event_key：去 event/receive 前缀 + 去 _/空格 + 小写），非本事件标题绝不入候选；判 exists 必须回传判据；映射表外事件名退化为「候选=[原名] → 建不出即 fail-loud」，⛔ 禁止静默吞掉",
+      "source": "pitfalls.md · P17 · T-20260916-UE5AUTO-HALLBEACON-D1D4-FIX（D-1）",
+      "related_patterns": [
+        "PTN-018",
+        "PTN-019"
+      ],
+      "known_cases": "D-1 · ReceiveActorEndOverlap 静默漏建（2026-09-17 活体复核通过：正向建出 + 去重反向 + 本地化归一反向）"
+    },
+    {
+      "id": "PTN-018",
+      "title": "同名节点仅按标题定位 → 无法分别设值（须按 GUID）",
+      "error_code": "E-BP-NODE-TITLE-NOT-UNIQUE",
+      "category": "node_error",
+      "severity": "warning",
+      "pattern": {
+        "log_regex": "(?i)(node.{0,20}not found|节点.{0,20}未找到|matched_by|同名节点|GetNodeByGuid)",
+        "symptom": "蓝图里有多个同名节点（如 3×「设置Actor在游戏中隐藏」）时，set_pin_default_value / get_pin_default_value 只能命中其中之一，其余无法单独设值",
+        "root_cause": "定位通路单一（_find_bp_node_info + _find_node_by_title_i18n），标题在同名场景不唯一 → 无稳定锚点",
+        "detection_check": "read_nodes 取目标节点 32 位 GUID；返回体 matched_by 必须 ∈ {guid, title} —— 出现 title 即提示存在同名风险"
+      },
+      "auto_fix": true,
+      "fix_action": "同名节点必须按 GUID 定位（get_node_by_guid / _pywrap_find_graph_by_guid → C++ GetNodeByGuid，精确唯一）；node_id 同时接受标题与 32 位 GUID（_pywrap_is_guid_like 判定），并可用显式别名 node_guid；返回体携带 matched_by 供确认命中依据（零 DLL 改动）",
+      "source": "pitfalls.md · P18 · T-20260916-UE5AUTO-HALLBEACON-D1D4-FIX（D-2）",
+      "related_patterns": [
+        "PTN-017"
+      ],
+      "known_cases": "D-2 · 3× 同名「设置Actor在游戏中隐藏」按 GUID 分别设 true/false/true（2026-09-17 活体复核通过）"
+    },
+    {
+      "id": "PTN-019",
+      "title": "/build spec 字段名契约与实现不一致（events / functions）",
+      "error_code": "E-BP-BUILD-SPEC-KEY-MISMATCH",
+      "category": "api_usage",
+      "severity": "error",
+      "pattern": {
+        "log_regex": "(?i)(add_event_node returned None|add_function_node returned None|空事件名|events\\[|functions\\[)",
+        "symptom": "第三方照文档写 spec（events 用 name、functions 用 name + target_class）→ 拿到空事件名 / 空函数名 → 节点建不出；且错误文本把根因指向「函数名不存在 / 该类不含此函数 / 非 UFUNCTION / 类路径拼写」等错误方向",
+        "root_cause": "文档声明的键名与模板实际读取的键名不一致 —— events：文档 name vs 实现 event_name；functions：文档 name + target_class vs 实现 function_name + function_path；bridge 侧原样透传未做归一化",
+        "detection_check": "传别名后应建出非空名节点；两者皆缺时错误文本必须点名 events[i] / functions[i] 并回传实收 keys"
+      },
+      "auto_fix": true,
+      "fix_action": "bridge 侧归一化（_normalize_build_events / _normalize_build_functions）：主字段优先 + 别名兼容 + 冲突取主字段并回传 warnings + 两者皆缺 fail-loud 点名下标与实收 keys；模板侧双层兼容；文档与实现对齐（SOP-PIPELINE.md §3.1 契约 schema）",
+      "source": "pitfalls.md · P19 · SOP-PIPELINE.md §3.1",
+      "related_patterns": [
+        "PTN-017"
+      ],
+      "known_cases": "D-5 · events name/event_name（T-20260917-D5D6-CONTRACT-FIX）+ D-8 · functions name/target_class（T-20260917-D8-FUNCTIONS-CONTRACT）"
+    }
+  ]
+}

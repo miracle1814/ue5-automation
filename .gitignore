@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# runtime artifacts (never commit)
+logs/
+output/
+*.log
+diagnosis_result.json
+analyzer_result.json
+
+# build intermediates / debug
+*.pdb
+Intermediate/
+Binaries/Win64/*.bak*
+Binaries/Win64/UnrealEditor-BlueprintPythonBridge.pdb
+
+# local editor state
+Saved/
+DerivedDataCache/
+.vs/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

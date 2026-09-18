@@ -1,0 +1,2 @@
+# fastapi / uvicorn / pydantic 安装在 UE 内的 Python 环境，不属于外部 pip 依赖
+requests>=2.32.3

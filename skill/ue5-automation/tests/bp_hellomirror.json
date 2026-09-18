@@ -1,0 +1,48 @@
+{
+  "basic_info": {
+    "name": "BP_HelloMirror",
+    "asset_path": "/Game/BP_HelloMirror",
+    "parent_class": "Actor",
+    "blueprint_type": "Blueprint",
+    "interfaces": []
+  },
+  "graphs": {
+    "UserConstructionScript": {
+      "graph_name": "UserConstructionScript",
+      "nodes": [
+        {
+          "node_name": "Construction Script",
+          "node_type": "K2Node_FunctionEntry",
+          "category": "unknown"
+        }
+      ],
+      "connections": []
+    },
+    "EventGraph": {
+      "graph_name": "EventGraph",
+      "nodes": [
+        {
+          "node_name": "事件开始运行",
+          "node_type": "K2Node_Event",
+          "category": "unknown"
+        },
+        {
+          "node_name": "打印字符串",
+          "node_type": "K2Node_CallFunction",
+          "category": "unknown"
+        },
+        {
+          "node_name": "延迟",
+          "node_type": "K2Node_CallFunction",
+          "category": "unknown"
+        }
+      ],
+      "connections": []
+    }
+  },
+  "related_blueprints": [],
+  "variables": [],
+  "referenced_assets": [],
+  "bridge_loaded": true,
+  "bridge_module": "unreal.BlueprintPythonBridge"
+}

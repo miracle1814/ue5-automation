@@ -1,0 +1,374 @@
+{
+  "manifest_version": 1,
+  "generated_at": "2026-09-18 18:07:03",
+  "mode": "release",
+  "with_tests": false,
+  "path_base": "source_root/dest_root are relative to workspace root; bridge.src_files are relative to release package root (dest_root)",
+  "source_root": "skills/ue5-automation",
+  "dest_root": "ue5-automation-skill-package",
+  "skill_version": "v0.18",
+  "package_version": "v3.2",
+  "release_date": "2026-09-18",
+  "root_sync": {
+    "setup.py": "synced(from source)",
+    "install_dependencies.bat": "synced(from source)",
+    "requirements.txt": "ensured"
+  },
+  "skill_section": {
+    "path": "skill/ue5-automation",
+    "file_count": 40,
+    "total_bytes": 1392222,
+    "files": [
+      {
+        "path": "API_REFERENCE.md",
+        "bytes": 15042,
+        "md5": "4293F8CFB4B247C4133DA91D3CDC917C"
+      },
+      {
+        "path": "config/error_patterns.json",
+        "bytes": 26526,
+        "md5": "4F38DF59718C43F53363F6D6A9A4F38D"
+      },
+      {
+        "path": "DEPLOY.md",
+        "bytes": 15380,
+        "md5": "EE158BD5D023D4EEC4472FE5500CD13F"
+      },
+      {
+        "path": "docs/L2-COMMANDS.md",
+        "bytes": 13436,
+        "md5": "BD29EF52D214DE9C8BE1DCEE48CB0122"
+      },
+      {
+        "path": "docs/MCP-ACCESS.md",
+        "bytes": 5619,
+        "md5": "9276378464167A25C1AF52FFA4B83769"
+      },
+      {
+        "path": "docs/pitfalls.md",
+        "bytes": 21723,
+        "md5": "3FD376FDC2B12C78DFB735124E7F8FE0"
+      },
+      {
+        "path": "docs/preflight.md",
+        "bytes": 4419,
+        "md5": "8938ECF8539D7C37E4B2D9B533D2321D"
+      },
+      {
+        "path": "docs/SOP-PIPELINE.md",
+        "bytes": 17231,
+        "md5": "6F1C5C9BE6A65C79F06774EC97499CFC"
+      },
+      {
+        "path": "docs/SOP-UE-HTTP-BRIDGE.md",
+        "bytes": 9293,
+        "md5": "B599E7CC5BA41C2334F1922DBBC0B24F"
+      },
+      {
+        "path": "docs/SOP.md",
+        "bytes": 10425,
+        "md5": "6694F0D2F5ADD3F2CBD0D00168F73344"
+      },
+      {
+        "path": "reader_schema.md",
+        "bytes": 14026,
+        "md5": "772D3C082A74DABE1025887B58ED933E"
+      },
+      {
+        "path": "requirements.txt",
+        "bytes": 111,
+        "md5": "3FF03C3298B7993D7D6CAD2D5A54F334"
+      },
+      {
+        "path": "scripts/analyzer.py",
+        "bytes": 71448,
+        "md5": "DF3A84115A3B9EB104604F377D5363F4"
+      },
+      {
+        "path": "scripts/analyzer_models.py",
+        "bytes": 7269,
+        "md5": "9ECBE094322EC2EBB0524DAEFE8EFFDD"
+      },
+      {
+        "path": "scripts/blueprint_builder.py",
+        "bytes": 34087,
+        "md5": "F003A9D6454957B662A4ADF05294C86B"
+      },
+      {
+        "path": "scripts/blueprint_editor.py",
+        "bytes": 48544,
+        "md5": "7CFA0B3F13DA12423A92E5C1D1ED67CA"
+      },
+      {
+        "path": "scripts/blueprint_reader.py",
+        "bytes": 46073,
+        "md5": "95B2429A6CE01F16418DE8E806BAC40B"
+      },
+      {
+        "path": "scripts/check_ue_version.py",
+        "bytes": 15380,
+        "md5": "B22849B84C50AECB71EAD5F460C96AEB"
+      },
+      {
+        "path": "scripts/fake_unreal.py",
+        "bytes": 57843,
+        "md5": "40097AD7795A96EDB278B3D3B4162EDA"
+      },
+      {
+        "path": "scripts/game_thread_build.py.tmpl",
+        "bytes": 27253,
+        "md5": "871E57C67468190004099A24D12E7FFA"
+      },
+      {
+        "path": "scripts/game_thread_connect.py.tmpl",
+        "bytes": 11492,
+        "md5": "672CC0CDB7ED406D610BC4CFFB7378B4"
+      },
+      {
+        "path": "scripts/init.py",
+        "bytes": 62675,
+        "md5": "97F68D3E94FE9FA623A8F2237E55585E"
+      },
+      {
+        "path": "scripts/log_parser.py",
+        "bytes": 28917,
+        "md5": "B31E1334F9D27996D3F4739B3D36DC1B"
+      },
+      {
+        "path": "scripts/mermaid_render.py",
+        "bytes": 16869,
+        "md5": "0D56DA187A7822B4A231E714CBB41B59"
+      },
+      {
+        "path": "scripts/preflight.py",
+        "bytes": 21420,
+        "md5": "38681739093716F319C44C3995571FF1"
+      },
+      {
+        "path": "scripts/project_analyzer.py",
+        "bytes": 1698,
+        "md5": "5AD4BAA6EF57501D887B648A84F660BF"
+      },
+      {
+        "path": "scripts/README.md",
+        "bytes": 6331,
+        "md5": "71BFD1C6AF989CFE615328E2A0788770"
+      },
+      {
+        "path": "scripts/ue5_bridge.py",
+        "bytes": 462416,
+        "md5": "E12AF1656C1E31C337E4D88334CF81EB"
+      },
+      {
+        "path": "scripts/ue5_runner.py",
+        "bytes": 30119,
+        "md5": "176905CA6D37A38910D7E4330850C7B0"
+      },
+      {
+        "path": "scripts/ue_send.py",
+        "bytes": 11185,
+        "md5": "AB7D764744D5885FF45C4B052D0DBE58"
+      },
+      {
+        "path": "scripts/unpin_console_refs.py.tmpl",
+        "bytes": 2048,
+        "md5": "491302717E91EAFD98E855E518DBB811"
+      },
+      {
+        "path": "SKILL.md",
+        "bytes": 89429,
+        "md5": "FF37D00CC837D8180ECF94C91789036D"
+      },
+      {
+        "path": "templates/analysis_report.md",
+        "bytes": 21071,
+        "md5": "BB6049DD2D0E1E356E8A0B6D0EEC843B"
+      },
+      {
+        "path": "templates/architecture_report.md",
+        "bytes": 32489,
+        "md5": "F56885ABFA075E3096646A1CDA12F988"
+      },
+      {
+        "path": "templates/creation_plan.md",
+        "bytes": 19366,
+        "md5": "2B584965789897A62A9EDA2601B1CEB7"
+      },
+      {
+        "path": "templates/diagnosis_report.md",
+        "bytes": 40584,
+        "md5": "7C958AC20B37753AAAE956B26C67A91A"
+      },
+      {
+        "path": "templates/mermaid_tags.md",
+        "bytes": 9325,
+        "md5": "E82C82F269C40BD9F9A4FDF326E7B59B"
+      },
+      {
+        "path": "UE_VERSION_GUIDE.md",
+        "bytes": 21408,
+        "md5": "87CD7667C0403DB5B97040A267D5662F"
+      },
+      {
+        "path": "USER_GUIDE.md",
+        "bytes": 5061,
+        "md5": "B6DABC4A9D23D08B6744BDB1E1ACE847"
+      },
+      {
+        "path": "workflow.md",
+        "bytes": 37191,
+        "md5": "DA47DBDC63E3065969AE8D5601E82E49"
+      }
+    ]
+  },
+  "bridge": {
+    "file_count": 21,
+    "files": [
+      {
+        "path": "BlueprintPythonBridge/Binaries/Win64/UnrealEditor-BlueprintPythonBridge.dll",
+        "bytes": 901120,
+        "md5": "C6FCA86B025FD8BA24D09432A0224D1E"
+      },
+      {
+        "path": "BlueprintPythonBridge/BlueprintPythonBridge.h",
+        "bytes": 21619,
+        "md5": "963999740465602F13498A7E1953C1D1"
+      },
+      {
+        "path": "BlueprintPythonBridge/BlueprintPythonBridge.uplugin",
+        "bytes": 601,
+        "md5": "98FB145683400567EF9B62353E2E5BC8"
+      },
+      {
+        "path": "BlueprintPythonBridge/DELIVERY.md",
+        "bytes": 4366,
+        "md5": "A1D6FCCC89E2DBCD504E15169447291F"
+      },
+      {
+        "path": "BlueprintPythonBridge/Source/BUILD.md",
+        "bytes": 4730,
+        "md5": "A5A7405E5F30864F681906BA4DE87AC6"
+      },
+      {
+        "path": "BlueprintPythonBridge/Source/BlueprintPythonBridge/BlueprintPythonBridge.Build.cs",
+        "bytes": 1174,
+        "md5": "AA16D1452219262B31876C206FC64318"
+      },
+      {
+        "path": "BlueprintPythonBridge/Source/BlueprintPythonBridge/Private/BlueprintPythonBridge.cpp",
+        "bytes": 164852,
+        "md5": "34EAD557C08C035E7B669325D843A6FB"
+      },
+      {
+        "path": "BlueprintPythonBridge/Source/BlueprintPythonBridge/Private/BlueprintPythonBridgeModule.cpp",
+        "bytes": 228,
+        "md5": "7AFABD07EB03D323753B2F61EA52C1DE"
+      },
+      {
+        "path": "BlueprintPythonBridge/Source/BlueprintPythonBridge/Private/_has_feature_workaround.h",
+        "bytes": 286,
+        "md5": "3DB1CF90DE5666B45411A8FB876FE19F"
+      },
+      {
+        "path": "BlueprintPythonBridge/Source/BlueprintPythonBridge/Public/BlueprintPythonBridge.h",
+        "bytes": 24612,
+        "md5": "634C9EC2E1151E6E30DC0E9D6FF53973"
+      },
+      {
+        "path": "BlueprintPythonBridge/Source/BlueprintPythonBridge/Public/BlueprintPythonBridgeModule.h",
+        "bytes": 247,
+        "md5": "1E829BBC6E5219044CAD408C21CDC42B"
+      },
+      {
+        "path": "BlueprintPythonBridge/Source/BuildConfiguration.xml",
+        "bytes": 551,
+        "md5": "202B227450CC157B3128BEB481BF1331"
+      },
+      {
+        "path": "BlueprintPythonBridge/Source/build_for_engine.bat",
+        "bytes": 4286,
+        "md5": "CD9CACBF716EA9F7AF61B0DCAC97B547"
+      },
+      {
+        "path": "BlueprintPythonBridge/deploy.py",
+        "bytes": 20649,
+        "md5": "8B4B89F6A17F44D94973739E30EE750F"
+      },
+      {
+        "path": "BlueprintPythonBridge/install.bat",
+        "bytes": 3627,
+        "md5": "2B5AACA5B94A4DD0402371F87F6D94A5"
+      },
+      {
+        "path": "prebuilt-5.8/UnrealEditor-BlueprintPythonBridge.dll",
+        "bytes": 833536,
+        "md5": "B5CABD4B9ABC288A865C29D414F2C7C3"
+      },
+      {
+        "path": "prebuilt-5.8/UnrealEditor.modules",
+        "bytes": 120,
+        "md5": "95F0C20C610AC116EB396C1C1D89DE63"
+      },
+      {
+        "path": "ue58-extras/README.md",
+        "bytes": 4363,
+        "md5": "866CE18480848649E816E79F4290EB1F"
+      },
+      {
+        "path": "ue58-extras/ue5-automation-extras/Content/Python/init_unreal.py",
+        "bytes": 2530,
+        "md5": "4CF751BA483A15E4B6DB4D509A8D32F1"
+      },
+      {
+        "path": "ue58-extras/ue5-automation-extras/Content/Python/ue5_automation_toolset.py",
+        "bytes": 19428,
+        "md5": "6CE9C092113276713B2A80B51C9E821E"
+      },
+      {
+        "path": "ue58-extras/ue5-automation-extras/ue5-automation-extras.uplugin",
+        "bytes": 870,
+        "md5": "89EB2B44AA1AB18A22C629205A3308A3"
+      }
+    ],
+    "src_files": [
+      "bridge/BlueprintPythonBridge/Binaries/Win64/UnrealEditor-BlueprintPythonBridge.dll",
+      "bridge/BlueprintPythonBridge/BlueprintPythonBridge.h",
+      "bridge/BlueprintPythonBridge/BlueprintPythonBridge.uplugin",
+      "bridge/BlueprintPythonBridge/DELIVERY.md",
+      "bridge/BlueprintPythonBridge/Source/BUILD.md",
+      "bridge/BlueprintPythonBridge/Source/BlueprintPythonBridge/BlueprintPythonBridge.Build.cs",
+      "bridge/BlueprintPythonBridge/Source/BlueprintPythonBridge/Private/BlueprintPythonBridge.cpp",
+      "bridge/BlueprintPythonBridge/Source/BlueprintPythonBridge/Private/BlueprintPythonBridgeModule.cpp",
+      "bridge/BlueprintPythonBridge/Source/BlueprintPythonBridge/Private/_has_feature_workaround.h",
+      "bridge/BlueprintPythonBridge/Source/BlueprintPythonBridge/Public/BlueprintPythonBridge.h",
+      "bridge/BlueprintPythonBridge/Source/BlueprintPythonBridge/Public/BlueprintPythonBridgeModule.h",
+      "bridge/BlueprintPythonBridge/Source/BuildConfiguration.xml",
+      "bridge/BlueprintPythonBridge/Source/build_for_engine.bat",
+      "bridge/BlueprintPythonBridge/deploy.py",
+      "bridge/BlueprintPythonBridge/install.bat",
+      "bridge/prebuilt-5.8/UnrealEditor-BlueprintPythonBridge.dll",
+      "bridge/prebuilt-5.8/UnrealEditor.modules",
+      "bridge/ue58-extras/README.md",
+      "bridge/ue58-extras/ue5-automation-extras/Content/Python/init_unreal.py",
+      "bridge/ue58-extras/ue5-automation-extras/Content/Python/ue5_automation_toolset.py",
+      "bridge/ue58-extras/ue5-automation-extras/ue5-automation-extras.uplugin"
+    ],
+    "dll": {
+      "verified": true,
+      "expected_size": 828416,
+      "expected_md5": "C6FCA86B025FD8BA24D09432A0224D1E",
+      "size": 901120,
+      "md5": "C6FCA86B025FD8BA24D09432A0224D1E",
+      "size_match": false,
+      "md5_match": true
+    },
+    "note": "bridge unique source; MD5 recorded, no copy (excluded *.bak*/*.pdb/internal docs)"
+  },
+  "readme_inject": {
+    "package_version": "v3.2",
+    "skill_version": "v0.18"
+  },
+  "excluded": [
+    "output/BlueprintPythonBridge (legacy delivery, not in new flow)"
+  ]
+}
