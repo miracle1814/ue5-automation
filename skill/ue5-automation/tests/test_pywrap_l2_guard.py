@@ -333,14 +333,19 @@ def _online_mod():
 
 
 def _variant(tmp_path, old=None, new=None):
-    """把 `B.__file__` 复制成变体（可选**定点**替换），返回变体路径。"""
-    with open(B.__file__, "r", encoding="utf-8") as f:
+    """把 `B.__file__` 复制成变体（可选**定点**替换），返回变体路径。
+
+    字节级复制（`rb`/`wb`）：不做换行归一化——「未改动副本」必须在字节层
+    与原文件一致，否则 CRLF/LF 漂移会污染指纹比对（CI Windows 检出实测踩中）。
+    """
+    with open(B.__file__, "rb") as f:
         src = f.read()
     if old is not None:
-        assert old in src, "变体锚点未命中（ue5_bridge.py 结构变化 → 本用例需同步）"
-        src = src.replace(old, new, 1)
+        old_b, new_b = old.encode("utf-8"), (new or "").encode("utf-8")
+        assert old_b in src, "变体锚点未命中（ue5_bridge.py 结构变化 → 本用例需同步）"
+        src = src.replace(old_b, new_b, 1)
     p = os.path.join(str(tmp_path), "ue5_bridge_variant.py")
-    with open(p, "w", encoding="utf-8", newline="") as f:
+    with open(p, "wb") as f:
         f.write(src)
     return p
 

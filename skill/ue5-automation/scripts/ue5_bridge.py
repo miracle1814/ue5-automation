@@ -3168,6 +3168,9 @@ def _pywrap_l2_impl_id(guard_code=None, file_bytes=None) -> str:
         if file_bytes is None:
             with open(__file__, "rb") as fh:
                 file_bytes = fh.read()
+        # 换行归一化：指纹跟踪**实现内容**而非 EOL——CRLF/LF 检出差异
+        # （Windows autocrlf / 复制工具）不得造成误报（2026-09-19 CI 实测踩中）
+        file_bytes = file_bytes.replace(b"\r\n", b"\n")
         file_sig = hashlib.sha1(file_bytes).hexdigest()[:12]
         file_len = len(file_bytes)
     except Exception as e:                        # pragma: no cover - 兜底

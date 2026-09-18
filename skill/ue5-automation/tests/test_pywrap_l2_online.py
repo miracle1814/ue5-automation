@@ -88,10 +88,15 @@ def _find_code(code, name=GUARD_FUNC):
 
 
 def disk_l2_impl_id(bridge_py=None) -> str:
-    """**磁盘模块指纹**：只 `compile()` 源码，不 import（无副作用、离线可用）。"""
+    """**磁盘模块指纹**：只 `compile()` 源码，不 import（无副作用、离线可用）。
+
+    与模块侧公式同步（两处必须同改）：字节先做 CRLF→LF 归一化——
+    指纹跟踪实现内容而非换行符（CI Windows autocrlf 检出差异不得误报）。
+    """
     path = bridge_py or BRIDGE_PY
     with open(path, "rb") as fh:
         src = fh.read()
+    src = src.replace(b"\r\n", b"\n")
     guard = _find_code(compile(src, path, "exec"))
     if guard is None:
         return _NO_GUARD_ID

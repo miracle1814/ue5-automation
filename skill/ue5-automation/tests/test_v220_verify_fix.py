@@ -317,10 +317,11 @@ class E11TokenReuseTests(unittest.TestCase):
         env["UE5_BRIDGE_TEST_MODE"] = "1"
         env["UE5_BRIDGE_TOKEN"] = ""
         probe = (
-            "import sys; sys.path.insert(0, %r); "
+            "import sys, os as _os; sys.path.insert(0, %r); "
+            "_os.makedirs(_os.path.dirname(%r), exist_ok=True); "
             "open(%r, 'w').write('SENTINEL_MARKER'); "
             "import ue5_bridge; "
-            "open(%r, 'w').write(ue5_bridge._BRIDGE_TOKEN)" % (SCRIPTS, token_file, token_file)
+            "open(%r, 'w').write(ue5_bridge._BRIDGE_TOKEN)" % (SCRIPTS, token_file, token_file, token_file)
         )
         # 用哨兵值预写 token 文件 → 导入 bridge 后文件内容必须仍是哨兵（=被复用）
         try:
