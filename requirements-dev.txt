@@ -1,3 +1,5 @@
 # Offline test suite (no editor / no UE required)
 pytest>=8.0
 pytest-timeout>=2.3
+# ue5_bridge imports pydantic at module level (request models)
+pydantic>=2.0
