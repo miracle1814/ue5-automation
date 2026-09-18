@@ -59,6 +59,28 @@ type %APPDATA%\ue5_bridge\token
 }
 ```
 
+### stdio 客户端（Claude Desktop 等不支持自定义 HTTP 头的客户端）
+
+随包 stdio 代理 `scripts/ue5_mcp_stdio.py`：本地应答 `initialize` / `tools/list` /
+`ping`（无需 UE 在线，工具目录与 /mcp 单一来源同步），`tools/call` 转发到编辑器内
+桥（默认 `http://127.0.0.1:8889/mcp`，可用 `UE5_BRIDGE_URL` 覆盖）。token 取
+`UE5_BRIDGE_TOKEN` 环境变量或 `%APPDATA%\ue5_bridge\token`（与桥同口径），UE 离线
+时调用返回可读错误、绝不假成功。
+
+```json
+{
+  "mcpServers": {
+    "ue5-automation": {
+      "command": "python",
+      "args": ["<仓库>/skill/ue5-automation/scripts/ue5_mcp_stdio.py"]
+    }
+  }
+}
+```
+
+日志走 stderr；stdout 只承载 JSON-RPC 协议流。离线自检：
+`echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | python ue5_mcp_stdio.py`。
+
 ## 三、协议与冒烟测试
 
 **支持**：`initialize`（协议版本协商 2025-06-18 / 2025-03-26 / 2024-11-05）、

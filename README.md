@@ -86,6 +86,20 @@ The toolkit **is** an MCP server. Point any MCP client at it:
 - **UE 5.8**: the engine's official MCP server at `http://127.0.0.1:8000/mcp` — enable it in
   project settings (`bAutoStartServer=True`) and install `bridge/ue58-extras/` (8 tools; with
   the prebuilt bridge, node-level graph tools work too)
+- **stdio clients (Claude Desktop & co.)**: launch the bundled stdio proxy — it serves the
+  full tool catalog locally and relays tool calls to the in-editor bridge (token read
+  automatically), so clients that can't set HTTP headers work out of the box:
+
+  ```json
+  {
+    "mcpServers": {
+      "ue5-automation": {
+        "command": "python",
+        "args": ["C:/path/to/ue5-automation/skill/ue5-automation/scripts/ue5_mcp_stdio.py"]
+      }
+    }
+  }
+  ```
 
 Then just talk to your agent:
 

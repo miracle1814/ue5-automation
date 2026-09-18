@@ -95,6 +95,20 @@ python ue5_runner.py health       :: 链路健康检查（输出 bridge_apis 列
 - **UE 5.8**：引擎自带官方 MCP 服务器（`http://127.0.0.1:8000/mcp`，需在项目设置开
   `bAutoStartServer=True`）+ 安装 `bridge/ue58-extras/` 插件（8 个工具；配合随包
   预编译桥，节点级图工具同样可用）。
+- **stdio 客户端（Claude Desktop 等）**：用随包的 stdio 代理——它在本地提供完整
+  工具目录（不需要 UE 在线即可握手/列工具），调用时转发给编辑器内的桥，token 自动
+  读取。不支持自定义 HTTP 头的客户端即插即用：
+
+  ```json
+  {
+    "mcpServers": {
+      "ue5-automation": {
+        "command": "python",
+        "args": ["C:/path/to/ue5-automation/skill/ue5-automation/scripts/ue5_mcp_stdio.py"]
+      }
+    }
+  }
+  ```
 
 然后直接对 AI 说：
 
