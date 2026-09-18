@@ -230,6 +230,61 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 ---
 
+## 七·五、UE 5.8 部署差异（v3.2 双引擎实测沉淀 · 必读）
+
+> 以下三点均在 UE 5.8.2 活体验证（2026-09-19 功能实测，见 v3.2 功能实测报告）。
+> 5.1 用户不受影响，可跳过本节。
+
+### ① 远程执行设置键改名 + 生效配置层不同
+
+5.8 把设置属性从 `bEnableRemoteExecution` **改名为 `bRemoteExecution`**，
+且 ini 写在 `DefaultEditorPerProjectUserSettings.ini` **不生效**——实际生效层是
+**`DefaultEngine.ini`**：
+
+```ini
+; <项目>\Config\DefaultEngine.ini
+[/Script/PythonScriptPlugin.PythonScriptPluginSettings]
+bRemoteExecution=true
+RemoteExecutionMulticastGroupEndpoint=239.0.0.1:6766
+RemoteExecutionMulticastBindAddress=0.0.0.0
+```
+
+写入后**重启编辑器**。验证：编辑器日志出现组播侦听，或宿主机
+`python scripts\ue_send.py` 探测（`ue_send.send` 远程执行一句 `print`）。
+
+### ② 桥 Python 依赖必须装入「引擎」site-packages（--target）
+
+5.8 内嵌 Python（3.11）与 5.1 环境独立，fastapi/uvicorn/pydantic 等需单独安装。
+⚠️ 直接 `pip install` 可能因目录权限回退到**用户目录**
+（`%APPDATA%\Python\Python311\site-packages`）——编辑器内嵌解释器是隔离模式，
+**看不见用户目录**（表现为 `import fastapi` 过了但依赖链里的包缺）。
+必须显式 `--target` 到引擎 site-packages：
+
+```cmd
+"<UE安装目录>\Engine\Binaries\ThirdParty\Python3\Win64\python.exe" ^
+  -m pip install --target "<UE安装目录>\Engine\Binaries\ThirdParty\Python3\Win64\Lib\site-packages" ^
+  fastapi "uvicorn[standard]" pydantic requests
+```
+
+### ③ 预编译桥 DLL 与 `UnrealEditor.modules` 成对放置
+
+```cmd
+copy bridge\prebuilt-5.8\UnrealEditor-BlueprintPythonBridge.dll  "<项目>\Plugins\BlueprintPythonBridge\Binaries\Win64\"
+copy bridge\prebuilt-5.8\UnrealEditor.modules                    "<项目>\Plugins\BlueprintPythonBridge\Binaries\Win64\"
+```
+
+缺 `.modules` 会报 `Incompatible or missing module`（被 5.8 加载器拒绝）。
+部署后重启编辑器。
+
+### ④ UE 5.8 的 GameThread 严格检查（宿主侧已内置兼容）
+
+5.8 起**引擎与桥 DLL 拒绝非 GameThread 的 unreal/DLL 访问**（5.1 宽容）。
+宿主侧 `ue5_bridge.py` 已内置统一 GT 分流（`_gt_run_handler`，含重入保护），
+调用方无需任何改动；但**自行扩展命令时**必须遵循同一纪律——参见
+`CONTRIBUTING.md` 核心规则第 2 条。
+
+---
+
 ## 八、验证步骤
 
 ### 1. Health 检查
