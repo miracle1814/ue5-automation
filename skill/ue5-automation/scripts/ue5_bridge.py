@@ -387,7 +387,7 @@ def _safe_call(fn, *args, error_cat: str = "unknown",
       - 每次操作后验证结果
     """
     try:
-        result = fn(*args, **kwargs)
+        result = _gt_run_handler(fn, *args, timeout=300.0, **kwargs)
         return result
     except Exception as e:
         # T-20260909-SKILL-DEFECT-FIX：fn 可能没有 __name__（functools.partial /
@@ -424,9 +424,12 @@ _GT_REGISTERED_CB = getattr(sys.modules.get(__name__), '_GT_REGISTERED_CB', None
 _GT_WORKER_STOPPED = getattr(sys.modules.get(__name__), '_GT_WORKER_STOPPED', False)
 
 
+_GT_TASK_RUNNING = False  # GT worker 正在执行任务（嵌套分流安全阀）
+
+
 def _gt_worker(delta_time: float):
     """持久的 GameThread tick worker——每帧从队列取一个任务执行。"""
-    global _GT_WORKER_STOPPED
+    global _GT_WORKER_STOPPED, _GT_TASK_RUNNING
     # 🔧 T-20260805-CRASH-ATEXIT-FIX P0-③：已停止（stop()/UE 关闭）后，即使
     #   unregister 失败导致 Slate 残留回调被调用，也立即跳过——不取任务、不碰
     #   任何 unreal 对象（防 use-after-free AV）。
@@ -437,6 +440,7 @@ def _gt_worker(delta_time: float):
     except _queue.Empty:
         return True  # 继续等待下一帧
 
+    _GT_TASK_RUNNING = True
     try:
         result = fn(*args, **kwargs)
         with _GT_LOCK:
@@ -459,6 +463,8 @@ def _gt_worker(delta_time: float):
                     suggestion=traceback.format_exc()[-500:],
                 )
                 entry["event"].set()
+    finally:
+        _GT_TASK_RUNNING = False
     return True  # 持续运行，不注销
 
 
@@ -543,6 +549,11 @@ def _run_on_game_thread_sync(fn, *args, timeout: float = 30.0, **kwargs):
       - 支持并发请求（每请求独立 task_id + Event）
     """
     global _GT_COUNTER
+    # 🔧 v3.2 实测修复：重入保护——已在 GT 任务内（_gt_worker 正在执行本线程）
+    #    时再入队会自等待（worker 阻塞在本次调用上，永远取不到新任务）→ 30s 级联超时。
+    #    此时必然已在 GameThread 上 → 直接内联执行。
+    if _GT_TASK_RUNNING:
+        return fn(*args, **kwargs)
     with _GT_LOCK:
         _GT_COUNTER += 1
         task_id = _GT_COUNTER
@@ -4987,7 +4998,10 @@ def _cmd_spawn_actor(actor_class: str, location=None, rotation=None,
         if cls is None:
             raise BridgeError("类加载失败: %s" % _raw_cls, category="actor_spawn")
         vec = u.Vector(float(loc3[0]), float(loc3[1]), float(loc3[2]))
-        rot = u.Rotator(float(rot3[0]), float(rot3[1]), float(rot3[2]))
+        # UE Rotator 位置构造口径 = (roll, pitch, yaw)；文档契约是 [pitch, yaw, roll]
+        # → 必须用关键字构造，否则 pitch/yaw 静默互换（v3.2 实测发现，回读比对抓获）
+        rot = u.Rotator(roll=float(rot3[2]), pitch=float(rot3[0]),
+                        yaw=float(rot3[1]))
         w, wname = _ue_scene_world(world)
         # PIE 世界生成走 GameplayStatics（EditorLevelLibrary 只面向编辑器世界）
         spawned = None
@@ -5070,7 +5084,10 @@ def _cmd_set_actor_transform(actor_name: str, location=None, rotation=None,
                                   % ",".join(tried), category="actor_transform")
             applied["location_api"] = used
         if rot3 is not None:
-            rot = u.Rotator(float(rot3[0]), float(rot3[1]), float(rot3[2]))
+            # UE Rotator 位置构造口径 = (roll, pitch, yaw)；文档契约是 [pitch, yaw, roll]
+            # → 必须用关键字构造，否则 pitch/yaw 静默互换（v3.2 实测发现，回读比对抓获）
+            rot = u.Rotator(roll=float(rot3[2]), pitch=float(rot3[0]),
+                            yaw=float(rot3[1]))
             res, used, tried = _ue_try_call(
                 a, ("set_actor_rotation",), rot, False)
             if used == "":
@@ -5181,17 +5198,31 @@ def _resolve_log_file(log_file: str = ""):
     dirs = []
     if u is not None:
         pdet = getattr(u, "Paths", None)
-        for n in ("project_log_dir",):
+
+        def _abs(v):
+            # v3.2 实测修复（5.8）：Paths 返回相对路径（../../../..），按编辑器
+            # CWD 解析会指错盘符 → 统一转绝对（转失败保留原值兜底）。
+            try:
+                conv = getattr(u.Paths, "convert_relative_path_to_full", None)
+                if callable(conv):
+                    return conv(v)
+            except Exception:
+                pass
+            return v
+
+        for n in ("project_log_dir", "project_saved_dir"):
             fn = getattr(pdet, n, None) if pdet is not None else None
             if callable(fn):
                 try:
-                    dirs.append(str(fn()))
+                    v = _abs(str(fn()))
+                    dirs.append(v if n == "project_log_dir"
+                                else os.path.join(v, "Logs"))
                 except Exception:
                     pass
         fn = getattr(pdet, "project_dir", None) if pdet is not None else None
         if callable(fn):
             try:
-                dirs.append(os.path.join(str(fn()), "Saved", "Logs"))
+                dirs.append(os.path.join(_abs(str(fn())), "Saved", "Logs"))
             except Exception:
                 pass
     for d in dirs:
@@ -6034,6 +6065,22 @@ _COMMAND_WHITELIST = {
 }
 
 
+def _gt_run_handler(fn, *args, timeout: float = 600.0, **kwargs):
+    """端点处理器统一 GameThread 分流（v3.2 功能实测修复）。
+
+    5.1 时代的内嵌 Python 对非 GT 访问宽容；5.8 起**引擎与桥 DLL 均直接拒绝**
+    （"Attempted to access Unreal API from outside the main game thread"）。
+    故所有可能触达 unreal/DLL 的端点处理器统一经此分流：
+
+      · TEST_MODE / worker 未运行（UE 外、离线测试）→ 直呼；
+      · 已在 GT 任务内（嵌套调用，如 editor_batch → 子命令）→ 直呼（防自等待死锁）；
+      · 其余（HTTP 线程）→ 投递 python 侧 GT 队列同步执行（fail-loud 超时）。
+    """
+    if _TEST_MODE or _GT_WORKER_STOPPED or _GT_TASK_RUNNING:
+        return fn(*args, **kwargs)
+    return _run_on_game_thread_sync(fn, *args, timeout=timeout, **kwargs)
+
+
 @app.post("/command", response_model=CommandResponse)
 def execute_command(req: CommandRequest, request: Request = None):  # 🔧 B: async→sync def（T-20260806-UE5BRIDGE-CRASH-FIX 方案B·线程池隔离）
     """白名单命令模式 — 客户端只能说预定义命令。
@@ -6130,7 +6177,7 @@ def execute_command(req: CommandRequest, request: Request = None):  # 🔧 B: as
     _OP_LOG.info(f"📋 /command: {req.command} params={str(req.params)[:200]}")
 
     try:
-        result = _COMMAND_WHITELIST[req.command](**req.params)
+        result = _gt_run_handler(_COMMAND_WHITELIST[req.command], **req.params)
         # D-1（T-20260913-UE5BRIDGE-DELETE-COMPILE-FIX）：**opt-in** fail-loud 传播
         #   —— 白名单命令返回体带 `_fail_loud=True` 且 success=False 时，
         #   命令层 success 置 false（⛔ 不再返回假成功）。
@@ -7491,33 +7538,11 @@ def connect_pins(req: ConnectRequest, request: Request = None):  # 🔧 B: async
         with open(os.path.join(os.path.dirname(__file__), "game_thread_connect.py.tmpl"), "r", encoding="utf-8") as _f:
             gt_code = _wrap_gt_scope(_f.read().replace("{SPEC_FILE}", repr(spec_file)).replace("{RESULT_FILE}", repr(result_file)))
 
-        if BRIDGE_AVAILABLE and hasattr(bridge, 'execute_python_on_game_thread'):
-            # 🔧 E: 路径② trace_id 标记（T-20260806-UE5BRIDGE-CRASH-FIX 方案E）
-            _OP_LOG.info(f"[trace_id={getattr(request.state, 'trace_id', '?')}] PATH2 execute_python_on_game_thread(connect_pins)")
-            bridge.execute_python_on_game_thread(gt_code)
-
-            # 🔴 T-20260724-D34FIX: 轮询等待 GameThread 完成，避免 TOCTOU 竞态
-            _timeout = 30.0
-            _interval = 0.1
-            _waited = 0.0
-            while not os.path.exists(result_file) and _waited < _timeout:
-                time.sleep(_interval)
-                _waited += _interval
-
-            if os.path.exists(result_file):
-                with open(result_file, 'r', encoding='utf-8') as f:
-                    gt_result = json.load(f)
-                os.remove(result_file)
-                result["success"] = gt_result.get("success", True)
-                result["results"] = gt_result.get("results", [])
-                if gt_result.get("error"):
-                    result["error"] = gt_result["error"]
-            else:
-                result["success"] = False
-                result["error"] = f"GameThread 执行未产出结果文件（超时 {_timeout}s）"
-        else:
-            result["success"] = False
-            result["error"] = "Bridge DLL 不可用或缺少 execute_python_on_game_thread；无法连线"
+        # v3.2 实测修复（5.8）：DLL 的 execute_python_on_game_thread 派发路径
+        # 在 5.8 引擎的严格 GT 检查下失效（轮询等待期间 GT 被自身阻塞）。
+        # 处理器已经 _gt_run_handler 整体分流到 GT → 这里直接执行 Python 路径。
+        result.update(_cmd_connect_pins(req.blueprint_path,
+                                        req.connections) or {})
 
         # 清理 spec 文件
         try:
@@ -9088,7 +9113,7 @@ class _TrustedRequest:
     """
 
     class _Headers:
-        def get(self, _self, key, default=None):
+        def get(self, key, default=None):
             if str(key).lower() == "x-skill-token":
                 return _BRIDGE_TOKEN
             return default
@@ -9270,10 +9295,8 @@ def _mcp_impl_dispatch(name, args):
         "ue5_build_blueprint": _mcp_impl_build,
         "ue5_build_batch": _mcp_impl_build_batch,
         "ue5_compile": lambda a: _cmd_compile_blueprint(a["bp_path"]),
-        "ue5_connect_pins": lambda a: connect_pins(
-            ConnectRequest(blueprint_path=a["blueprint_path"],
-                           connections=a.get("connections", [])),
-            _TrustedRequest()),
+        "ue5_connect_pins": lambda a: _gt_run_handler(
+            _cmd_connect_pins, a["blueprint_path"], a.get("connections", [])),
         "ue5_disconnect_pin": lambda a: disconnect_pin(
             DisconnectRequest(blueprint_path=a["blueprint_path"],
                               node_id=a["node_id"], pin_name=a["pin_name"]),
@@ -9343,7 +9366,7 @@ def _mcp_handle_one(payload: Dict):
         if impl is None:
             return _mcp_err(_id, -32602, "Unknown tool: %s" % name), 200
         try:
-            result = impl(args)
+            result = _gt_run_handler(impl, args)
             is_err = (isinstance(result, dict)
                       and result.get("success") is False)
             return {"jsonrpc": "2.0", "id": _id,
