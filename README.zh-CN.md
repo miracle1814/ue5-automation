@@ -136,7 +136,6 @@ python analyzer.py --input reader_out.json --summary
 ├── skill/ue5-automation/            宿主侧的"脑"：桥客户端、/mcp 端点、runner、
 │                                    蓝图读写/创建器、分析器、日志解析、preflight、
 │                                    文档、报告模板、tests/（离线测试套件）+ conftest.py
-├── docs/reports/                    验证与验收报告（v2.20 → v3.2）
 ├── manifest.json                    发布清单（逐文件 MD5，供下载后校验）
 └── CHANGELOG.md                     版本历史
 ```

@@ -91,7 +91,7 @@ Then just talk to your agent:
 
 > "Create a pickup item blueprint with a collision sphere, then verify the pickup logic in PIE."
 
-See [docs/MCP-ACCESS.md](docs/MCP-ACCESS.md) for client configuration (ZCode / Claude Desktop /
+See [MCP-ACCESS.md](skill/ue5-automation/docs/MCP-ACCESS.md) for client configuration (ZCode / Claude Desktop /
 Cursor / raw JSON) and the [tool catalog](docs/MCP-ACCESS.md).
 
 ## Use it from the command line
@@ -129,10 +129,9 @@ Every write is **read back and compared**; mismatches raise loud errors. We cons
 | [START-HERE (中文快速开始)](START-HERE.zh-CN.md) | 部署 / 接入 / SOP / 能力 / 排障 |
 | [README.zh-CN.md](README.zh-CN.md) | 中文说明与部署指南 |
 | [skill/ue5-automation/SKILL.md](skill/ue5-automation/SKILL.md) | full manual (v0.18) |
-| [docs/MCP-ACCESS.md](docs/MCP-ACCESS.md) | connecting MCP clients to UE 5.1–5.5 |
+| [MCP-ACCESS.md](skill/ue5-automation/docs/MCP-ACCESS.md) | connecting MCP clients to UE 5.1–5.5 |
 | [skill/ue5-automation/docs/pitfalls.md](skill/ue5-automation/docs/pitfalls.md) | 19 known pitfalls (and fixes) |
-| [bridge/Source/BUILD.md](bridge/BlueprintPythonBridge/Source/BUILD.md) | compiling the bridge for 5.2–5.8 |
-| [docs/reports/](docs/reports/) | verification & acceptance reports (v2.20 → v3.2) |
+| [bridge/BlueprintPythonBridge/Source/BUILD.md](bridge/BlueprintPythonBridge/Source/BUILD.md) | compiling the bridge for 5.2–5.8 |
 
 ## Repository layout
 
@@ -146,7 +145,7 @@ Every write is **read back and compared**; mismatches raise loud errors. We cons
 ├── skill/ue5-automation/       host-side brain: bridge client, MCP endpoint,
 │                               runner, blueprint editor/reader/builder, analyzer,
 │                               log parser, preflight, docs, report templates
-└── docs/                       verification reports
+└── CHANGELOG.md                per-release summaries
 ```
 
 ## Status & tested-against
@@ -154,7 +153,7 @@ Every write is **read back and compared**; mismatches raise loud errors. We cons
 - Offline regression: **473 passed / 0 failed** (98 skipped = online-only tests that need a live editor)
 - Live end-to-end verified on **UE 5.1.1** and **UE 5.8.2** (editor → official MCP →
   toolset → C++ bridge → live PIE state)
-- See [docs/reports/](docs/reports/) for evidence and known limitations
+- See [CHANGELOG.md](CHANGELOG.md) for per-release summaries
 
 ## License
 
