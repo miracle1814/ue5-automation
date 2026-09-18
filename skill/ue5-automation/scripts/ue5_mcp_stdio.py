@@ -49,6 +49,15 @@ def _log(*args):
     print("[ue5-mcp-stdio]", *args, file=sys.stderr, flush=True)
 
 
+# stdout 编码钉死 UTF-8：Windows CI/控制台默认代码页（如 cp1252）会把
+# 工具描述里的中文写出非 UTF-8 字节，污染 stdio 协议流。
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except (AttributeError, ValueError):
+    pass
+
+
 def _load_token():
     env = os.environ.get("UE5_BRIDGE_TOKEN")
     if env:
@@ -179,8 +188,10 @@ def _main():
             if resp is not None:
                 out.append(resp)
         if out:
+            # ensure_ascii=True：协议流恒为纯 ASCII（非 ASCII 转义为 \uXXXX），
+            # 对 stdio 编码差异完全免疫。
             print(json.dumps(out if isinstance(msg, list) else out[0],
-                             ensure_ascii=False), flush=True)
+                             ensure_ascii=True), flush=True)
 
 
 if __name__ == "__main__":

@@ -21,6 +21,8 @@ PROXY = os.path.join(SCRIPTS, "ue5_mcp_stdio.py")
 def _spawn(env_extra):
     env = dict(os.environ)
     env.update(env_extra)
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
     return subprocess.Popen(
         [sys.executable, PROXY], stdin=subprocess.PIPE,
         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,

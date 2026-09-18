@@ -23,6 +23,7 @@ RUN pip install --no-cache-dir fastapi uvicorn pydantic requests
 # which `unreal` module object is injected at import time — the proxy itself
 # never executes engine commands locally (calls are relayed to the editor).
 ENV UE5_BRIDGE_TEST_MODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONUTF8=1
 
 CMD ["python", "ue5_mcp_stdio.py"]
