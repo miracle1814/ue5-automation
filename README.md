@@ -159,6 +159,9 @@ Every write is **read back and compared**; mismatches raise loud errors. We cons
 
 Apache-2.0 — see [LICENSE](LICENSE).
 
+> Unreal® Engine is a trademark of Epic Games, Inc. This project is an independent
+> developer tool and is not affiliated with or endorsed by Epic Games.
+
 ## Acknowledgements
 
 Built on top of the UE editor's Python & remote-execution surfaces, and integrating with

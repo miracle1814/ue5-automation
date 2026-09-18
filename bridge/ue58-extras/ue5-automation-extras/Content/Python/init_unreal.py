@@ -1,4 +1,4 @@
-# Copyright Epic Games, Inc. All Rights Reserved.
+# ue5-automation-extras — part of the ue5-automation toolkit (Apache-2.0)
 """ue5-automation-extras — 把 ue5-automation skill 的能力注册进官方 MCP。
 
 随 ue5-automation v3.0 发布包交付（bridge/ue58-extras/）。

@@ -196,6 +196,9 @@ A: 蓝图半成品已创建（资产/变量/组件完成），节点/连线/编�
 
 Apache-2.0 —— 见 [LICENSE](LICENSE)。
 
+> Unreal® Engine 是 Epic Games, Inc. 的商标。本项目为独立开发者工具，与 Epic Games
+> 无隶属或背书关系。
+
 ## 致谢
 
 构建于 UE 编辑器的 Python 与远程执行接口之上，并与官方

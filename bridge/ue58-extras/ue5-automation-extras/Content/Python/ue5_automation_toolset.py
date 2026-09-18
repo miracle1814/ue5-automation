@@ -1,4 +1,4 @@
-# Copyright Epic Games, Inc. All Rights Reserved.
+# ue5-automation-extras — part of the ue5-automation toolkit (Apache-2.0)
 """ue5-automation-extras 工具集：把 ue5-automation 的验证型能力带进官方 MCP。
 
 设计要点（全部来自 ue5-automation v3.x 的开发与实测经验）：
