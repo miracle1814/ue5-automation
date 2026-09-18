@@ -92,7 +92,7 @@ Then just talk to your agent:
 > "Create a pickup item blueprint with a collision sphere, then verify the pickup logic in PIE."
 
 See [MCP-ACCESS.md](skill/ue5-automation/docs/MCP-ACCESS.md) for client configuration (ZCode / Claude Desktop /
-Cursor / raw JSON) and the [tool catalog](docs/MCP-ACCESS.md).
+Cursor / raw JSON) and the full tool catalog.
 
 ## Use it from the command line
 
