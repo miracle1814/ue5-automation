@@ -1,5 +1,7 @@
 # UE5 Automation Skill — AI-driven Blueprint Automation for Unreal Engine
 
+**English** | [简体中文](README.zh-CN.md)
+
 **Let AI agents (or scripts) actually operate the Unreal Editor** — read blueprints, build them from scratch, edit them incrementally, author materials and UMG widget blueprints, verify behavior in PIE at runtime, self-service logs, and audit whole projects.
 
 **Engine support: UE 5.1 – 5.8** (5.1 & 5.8 ship with prebuilt bridges — zero compilation).
