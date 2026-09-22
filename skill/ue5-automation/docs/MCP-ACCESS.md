@@ -113,15 +113,15 @@ print([t["name"] for t in rpc("tools/list")["result"]["tools"]])
 
 | 分组 | 工具 |
 |:--|:--|
-| 诊断 | `ue5_health` · `ue5_diag` |
+| 诊断 | `ue5_check_health` · `ue5_run_diagnostics` |
 | 只读 | `ue5_list_assets` · `ue5_read_blueprint` · `ue5_read_nodes` · `ue5_read_connections` |
-| 蓝图写 | `ue5_build_blueprint` · `ue5_build_batch` · `ue5_compile` · `ue5_connect_pins` · `ue5_disconnect_pin` · `ue5_delete_node` |
+| 蓝图写 | `ue5_build_blueprint` · `ue5_build_batch` · `ue5_compile_blueprint` · `ue5_connect_pins` · `ue5_disconnect_pin` · `ue5_delete_node` |
 | 资产 | `ue5_save_asset` · `ue5_delete_asset` |
-| PIE 验证 | `ue5_pie_start` · `ue5_pie_stop` · `ue5_pie_state` · `ue5_pie_actors` · `ue5_pie_get_property` · `ue5_pie_set_transform` |
-| 日志/批量 | `ue5_logs` · `ue5_batch` |
-| 材质（v3.0） | `ue5_command` 内：`material_create` / `material_add_expression` / `material_connect_expressions` / `material_connect_property` / `material_set_expression_property` / `material_compile` / `material_read` / `material_instance_create` / `material_instance_set_parameter` |
-| UMG（v3.0，需 v3.0 DLL） | `ue5_command` 内：`widget_create` / `widget_add_child` / `widget_set_property` / `widget_read_tree` |
-| 透传 | `ue5_command`（**72 条**白名单命令全量入口；描述中列全命令名） |
+| PIE 验证 | `ue5_start_pie` · `ue5_stop_pie` · `ue5_read_pie_state` · `ue5_list_pie_actors` · `ue5_read_pie_property` · `ue5_set_pie_transform` |
+| 日志/批量 | `ue5_read_logs` · `ue5_run_batch` |
+| 材质（v3.0） | `ue5_execute_command` 内：`material_create` / `material_add_expression` / `material_connect_expressions` / `material_connect_property` / `material_set_expression_property` / `material_compile` / `material_read` / `material_instance_create` / `material_instance_set_parameter` |
+| UMG（v3.0，需 v3.0 DLL） | `ue5_execute_command` 内：`widget_create` / `widget_add_child` / `widget_set_property` / `widget_read_tree` |
+| 透传 | `ue5_execute_command`（**72 条**白名单命令全量入口；描述中列全命令名） |
 
 **为何不平铺 72 条命令**：`tools/list` 体积直接吃客户端 token 预算（官方 MCP 的
 `describe_toolset` 就因超预算被截断）。这里 23 个高频工具 + 1 个透传入口，
@@ -131,13 +131,13 @@ print([t["name"] for t in rpc("tools/list")["result"]["tools"]])
 
 ```
 ue5_build_blueprint(spec)                 # 建蓝图（事件+函数节点+连线+编译）
-ue5_pie_start(mode="simulate")            # 启动 Simulate
-ue5_pie_state()                           # 轮询 is_playing == true
-ue5_pie_actors(name_filter="BP_MyActor")  # 找运行时对象（路径含 UEDPIE_0_）
-ue5_pie_get_property(actor, "Health")     # 读运行时变量 → 证明逻辑真的跑了
-ue5_pie_set_transform(actor, location=[...])  # 传送后复读，验证响应
-ue5_logs(pattern="BP_MyActor")            # 自取日志交叉验证
-ue5_pie_stop()
+ue5_start_pie(mode="simulate")            # 启动 Simulate
+ue5_read_pie_state()                           # 轮询 is_playing == true
+ue5_list_pie_actors(name_filter="BP_MyActor")  # 找运行时对象（路径含 UEDPIE_0_）
+ue5_read_pie_property(actor, "Health")     # 读运行时变量 → 证明逻辑真的跑了
+ue5_set_pie_transform(actor, location=[...])  # 传送后复读，验证响应
+ue5_read_logs(pattern="BP_MyActor")            # 自取日志交叉验证
+ue5_stop_pie()
 ```
 
 ## 六、安全边界（与 REST 端点同级）

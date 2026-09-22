@@ -2,6 +2,20 @@
 
 以下为主要变化摘要。
 
+## [3.3] — 2026-09-22（skill v0.19）
+- **MCP 工具目录规范化（面向 AI 客户端的工具选择质量）**：
+  - 命名统一为 `ue5_<verb>_<noun>`：`ue5_health→ue5_check_health`、`ue5_diag→ue5_run_diagnostics`、
+    `ue5_compile→ue5_compile_blueprint`、`ue5_logs→ue5_read_logs`、`ue5_batch→ue5_run_batch`、
+    `ue5_command→ue5_execute_command`、PIE 6 个 → `ue5_start_pie` / `ue5_stop_pie` /
+    `ue5_read_pie_state` / `ue5_list_pie_actors` / `ue5_read_pie_property` / `ue5_set_pie_transform`。
+  - 23 个工具描述重写为「英文主 + 中文注」，含 Use-when 指引与返回形态；`ue5_execute_command`
+    明确标注为"专用工具未覆盖时使用"的兜底入口。
+  - 参数 schema 逐项补 description（原多数为空）。
+  - 工具数仍为 23；内部 72 条命令白名单与 CLI 命令名不受影响。
+- 离线回归：**503 通过 / 0 失败**（95 跳过 = 需活体编辑器的在线用例）。
+- 已知遗留：UE 5.8 官方-MCP 工具集（`bridge/ue58-extras/`，8 工具）命名暂未同步，留待下版对齐；
+  `manifest.json` 为打包期生成产物，MD5 清单待下次打包时再生成。
+
 ## [3.2] — 2026-09-18（skill v0.18）
 - **UE 5.8 全链路打通**：C++ 桥按 5.8 编译（MSVC 14.44.35207）并通过官方 MCP 端到端验收
   （88 个桥方法、UMG 支持可见）。

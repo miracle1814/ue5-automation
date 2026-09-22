@@ -9096,14 +9096,14 @@ def editor_batch_ep(req: EditorBatchRequest, request: Request = None):
 #  · 传输：POST /mcp 单响应 JSON（Streamable HTTP 规范允许服务端返回单个
 #    application/json 响应）；通知类消息 → 202 空体。
 #  · 鉴权：与其余端点同一 token（X-Skill-Token 或 Authorization: Bearer）。
-#  · 工具面：约 23 个高频工具 + `ue5_command` 白名单透传（描述含全量命令名），
+#  · 工具面：23 个高频工具（verb_noun 命名，v3.3）+ `ue5_execute_command` 白名单透传（描述含全量命令名），
 #    避免把 59 条命令平铺撑爆 tools/list 的客户端 token 预算。
 #  · 复用：需要端点级语义（/build /connect 等）的工具体通过 _TrustedRequest
 #    垫片调用既有端点函数 —— MCP 层已完成等价鉴权，零逻辑复制。
 # ══════════════════════════════════════════════════════════
 
 _MCP_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
-_MCP_SERVER_INFO = {"name": "ue5-automation-bridge", "version": "3.0.0"}
+_MCP_SERVER_INFO = {"name": "ue5-automation-bridge", "version": "3.3.0"}
 
 
 class _TrustedRequest:
@@ -9131,110 +9131,252 @@ def _mcp_obj(props, required=None):
 
 
 def _mcp_tool_defs():
-    """MCP tools/list 清单（请求时构造 —— ue5_command 描述含动态白名单）。"""
-    S = {"type": "string"}
-    B = {"type": "boolean"}
-    I = {"type": "integer"}
-    N3 = {"type": "array", "items": {"type": "number"},
-          "description": "[x, y, z]"}
+    """MCP tools/list 清单（请求时构造 —— ue5_execute_command 描述含动态白名单）。
+
+    v3.3 命名约定：全部 `ue5_<verb>_<noun>`，动词族固定为
+      check_ / run_ / list_ / read_ / build_ / compile_ / connect_ /
+      disconnect_ / delete_ / save_ / start_ / stop_ / set_ / execute_
+    描述为「英文主 + 中文注」，含 Use-when 指引与返回形态；参数 schema 带逐项说明
+    （面向 AI 客户端的工具选择质量，见 CHANGELOG v3.3）。
+    """
+    def P(t, d):
+        return {"type": t, "description": d}
+
+    BP = P("string", "Blueprint asset path, e.g. /Game/BP_Test | 蓝图资产路径")
+    GRAPH = P("string", "Graph name; omit to search all graphs | 图名，缺省=全图搜索")
+    NODE = P("string", "Node title or 32-hex GUID; GUID is recommended when titles "
+                       "are duplicated | 节点标题或 32 位 GUID，标题歧义时必须 GUID")
+    PIN = P("string", "Pin name on the node, e.g. 'then', 'execute', 'ReturnValue' "
+                      "| 引脚名")
+    ASSET = P("string", "Asset path, e.g. /Game/BP_Test | 资产路径")
+    V3 = {"type": "array", "items": {"type": "number"}, "description": "[x, y, z]"}
     TOOLS = [
-        {"name": "ue5_health",
-         "description": "Bridge/UE 健康检查：引擎版本、项目名、bridge_apis 清单",
+        {"name": "ue5_check_health",
+         "description":
+             "Check bridge/editor health: engine version, project name, loaded bridge "
+             "API list. Call this first to confirm the editor is reachable before any "
+             "write operation. Returns {engine_version, project, bridge_apis[]}. "
+             "| 健康检查：引擎版本、项目名、bridge API 清单；任何写操作前先调用。",
          "inputSchema": _mcp_obj({})},
-        {"name": "ue5_diag",
-         "description": "Bridge 诊断：全部 C++ API 方法矩阵 + 关键 API 缺失项",
+        {"name": "ue5_run_diagnostics",
+         "description":
+             "Full bridge diagnostics: complete C++ API method matrix and any missing "
+             "critical APIs. Use when a tool fails with an API-missing error, or after "
+             "upgrading/replacing the bridge DLL. | Bridge 诊断：全部 C++ API 方法矩阵 "
+             "+ 关键 API 缺失项。",
          "inputSchema": _mcp_obj({})},
         {"name": "ue5_list_assets",
-         "description": "列出 /Game 资产路径",
-         "inputSchema": _mcp_obj({"path": S, "recursive": B}, ["path"])},
+         "description":
+             "List asset paths under a content folder (default /Game/). Use to discover "
+             "what exists before reading or editing. recursive=true walks subfolders. "
+             "| 列出 /Game 资产路径（recursive 控制是否递归）。",
+         "inputSchema": _mcp_obj({
+             "path": P("string", "Content folder to list, e.g. /Game/ | 要列出的目录"),
+             "recursive": P("boolean", "Walk subfolders (default true) | 是否递归")},
+             ["path"])},
         {"name": "ue5_read_blueprint",
-         "description": "读取蓝图（L1 类信息+变量+CDO / L2 节点+连线 / full）",
-         "inputSchema": _mcp_obj(
-             {"blueprint_path": S, "level": S, "include_cdo": B,
-              "include_connections": B}, ["blueprint_path"])},
+         "description":
+             "Read a Blueprint asset: level L1 = class info + variables + CDO, "
+             "L2 = node graph + connections, full = both. Read-only and safe to call "
+             "any time. Returns structured JSON (Markdown/Mermaid reports available via "
+             "the CLI reader). | 读取蓝图（L1 类信息+变量+CDO / L2 节点+连线 / full）。",
+         "inputSchema": _mcp_obj({
+             "blueprint_path": BP,
+             "level": P("string", "L1 | L2 | full (default L1) | 读取层级"),
+             "include_cdo": P("boolean", "Include class-default-object values "
+                                         "| 是否包含 CDO"),
+             "include_connections": P("boolean", "Include pin connections "
+                                                "| 是否包含连线")},
+             ["blueprint_path"])},
         {"name": "ue5_read_nodes",
-         "description": "读取蓝图节点（不传 graph_name = 全图）",
-         "inputSchema": _mcp_obj({"bp_path": S, "graph_name": S}, ["bp_path"])},
+         "description":
+             "Read Blueprint nodes: titles, positions, GUIDs and pin defaults. Omit "
+             "graph_name to search all graphs. Use before connecting pins so you have "
+             "the GUIDs. | 读取蓝图节点（不传 graph_name = 全图搜索）。",
+         "inputSchema": _mcp_obj({"bp_path": BP, "graph_name": GRAPH}, ["bp_path"])},
         {"name": "ue5_read_connections",
-         "description": "读取蓝图连线拓扑",
-         "inputSchema": _mcp_obj({"bp_path": S, "graph_name": S}, ["bp_path"])},
+         "description":
+             "Read the Blueprint's connection topology (which pin connects to which "
+             "node/pin). Use to verify wiring before and after edits. | 读取蓝图连线拓扑。",
+         "inputSchema": _mcp_obj({"bp_path": BP, "graph_name": GRAPH}, ["bp_path"])},
         {"name": "ue5_build_blueprint",
-         "description": "创建蓝图（资产+变量+组件+接口+事件+函数节点+连线+编译）。"
-                        "spec 字段：blueprint_name(或 name), package_path, parent_class, "
-                        "variables[{name,type,default_value,category}], "
-                        "components[{name,component_class,properties}], interfaces[str], "
-                        "events[{event_name|name,pos}], "
-                        "functions[{function_name|name, target_class, function_path, "
-                        "defaults:{pin:val}, pos}], "
-                        "connections[{src_node,src_pin,dst_node,dst_pin}], compile_after。"
-                        "节点引用可用 32 位 GUID（推荐）或节点标题。",
-         "inputSchema": _mcp_obj({"spec": {"type": "object"}}, ["spec"])},
+         "description":
+             "Create a Blueprint from scratch in one atomic call: asset + variables + "
+             "components + interfaces + events + function nodes + connections + "
+             "optional compile. If any step fails, assets created by this call are "
+             "rolled back. spec fields: blueprint_name (or name), package_path, "
+             "parent_class, variables[{name,type,default_value,category}], "
+             "components[{name,component_class,properties}], interfaces[str], "
+             "events[{event_name|name,pos}], functions[{function_name|name, "
+             "target_class, function_path, defaults:{pin:val}, pos}], "
+             "connections[{src_node,src_pin,dst_node,dst_pin}], compile_after. "
+             "Node references accept 32-hex GUIDs (recommended) or titles. "
+             "| 创建蓝图（原子化：失败回滚已建资产）。",
+         "inputSchema": _mcp_obj({
+             "spec": P("object", "Blueprint build spec (see description for fields) "
+                                 "| 蓝图构建规格，字段见描述")},
+             ["spec"])},
         {"name": "ue5_build_batch",
-         "description": "批量创建蓝图（原子化：任一失败回滚已建资产）。"
-                        "{blueprints: [spec, ...]}",
-         "inputSchema": _mcp_obj({"blueprints": {"type": "array"}}, ["blueprints"])},
-        {"name": "ue5_compile",
-         "description": "编译蓝图 + 回读编译状态 + 日志错误模式扫描",
-         "inputSchema": _mcp_obj({"bp_path": S}, ["bp_path"])},
+         "description":
+             "Create multiple Blueprints in one atomic batch: if any blueprint fails, "
+             "all assets created by this batch are rolled back. Prefer ue5_build_blueprint "
+             "unless multi-asset atomicity is actually needed. "
+             "| 批量创建蓝图（原子化：任一失败回滚本批已建资产）。",
+         "inputSchema": _mcp_obj({
+             "blueprints": P("array", "Array of build specs, same schema as "
+                                      "ue5_build_blueprint.spec | 构建规格数组")},
+             ["blueprints"])},
+        {"name": "ue5_compile_blueprint",
+         "description":
+             "Compile a Blueprint, read back the compile status and scan the log for "
+             "error patterns. The real compile result is reported: a failed compile "
+             "returns failure with log evidence, never a fake success. "
+             "| 编译蓝图 + 回读编译状态 + 日志错误模式扫描。",
+         "inputSchema": _mcp_obj({"bp_path": BP}, ["bp_path"])},
         {"name": "ue5_connect_pins",
-         "description": "引脚连线（三重拓扑验证）。src_node/dst_node 用节点标题或 "
-                        "32 位 GUID；同名节点必须 GUID（标题歧义会 fail-loud 拒绝）",
-         "inputSchema": _mcp_obj(
-             {"blueprint_path": S, "connections": {"type": "array"}},
+         "description":
+             "Connect pins with triple topology verification (existence, type "
+             "compatibility, read-back). Node references accept titles or 32-hex GUIDs; "
+             "ambiguous titles are rejected (fail-loud) — use GUIDs when titles repeat. "
+             "| 引脚连线（三重拓扑验证；标题歧义 fail-loud 拒绝）。",
+         "inputSchema": _mcp_obj({
+             "blueprint_path": BP,
+             "connections": P("array", "List of {src_node, src_pin, dst_node, dst_pin} "
+                                       "| 连线列表")},
              ["blueprint_path", "connections"])},
         {"name": "ue5_disconnect_pin",
-         "description": "断开节点某引脚的全部连线",
+         "description":
+             "Disconnect every connection attached to one pin of a node, verified "
+             "against the live topology. | 断开节点某引脚的全部连线（按实时拓扑验证）。",
          "inputSchema": _mcp_obj(
-             {"blueprint_path": S, "node_id": S, "pin_name": S},
+             {"blueprint_path": BP, "node_id": NODE, "pin_name": PIN},
              ["blueprint_path", "node_id", "pin_name"])},
         {"name": "ue5_delete_node",
-         "description": "删除节点（node_id = 标题或 GUID；dry_run 仅检查引用）",
+         "description":
+             "Delete a Blueprint node. dry_run=true only checks references without "
+             "deleting — use it first for nodes that may be referenced elsewhere. "
+             "| 删除节点（dry_run 仅检查引用，不删除）。",
          "inputSchema": _mcp_obj(
-             {"blueprint_path": S, "node_id": S, "dry_run": B},
+             {"blueprint_path": BP, "node_id": NODE,
+              "dry_run": P("boolean", "Check references only, do not delete "
+                                      "| 仅检查引用")},
              ["blueprint_path", "node_id"])},
         {"name": "ue5_save_asset",
-         "description": "保存资产落盘（only_if_is_dirty=true 仅脏包写盘）",
-         "inputSchema": _mcp_obj({"asset_path": S, "only_if_is_dirty": B},
-                                  ["asset_path"])},
+         "description":
+             "Save an asset to disk; only_if_is_dirty=true skips clean packages. "
+             "Saves are scoped to the asset's own package — this tool never triggers a "
+             "whole-project save. | 保存资产落盘（only_if_is_dirty=true 仅脏包写盘；"
+             "作用域=该资产包，绝不全工程保存）。",
+         "inputSchema": _mcp_obj({
+             "asset_path": ASSET,
+             "only_if_is_dirty": P("boolean", "Skip clean packages (default false) "
+                                              "| 仅脏包写盘")},
+             ["asset_path"])},
         {"name": "ue5_delete_asset",
-         "description": "级联删除资产（删后回读验证；保存作用域=引用者包，绝不全工程保存）",
-         "inputSchema": _mcp_obj({"asset_path": S, "max_attempts": I},
-                                  ["asset_path"])},
-        {"name": "ue5_pie_start",
-         "description": "启动 PIE/Simulate（异步；用 ue5_pie_state 轮询确认）",
-         "inputSchema": _mcp_obj({"mode": S})},
-        {"name": "ue5_pie_stop",
-         "description": "结束 PIE/Simulate",
+         "description":
+             "Delete an asset with reference checks and read-back verification. Save "
+             "scope = referencing packages only. | 级联删除资产（删后回读验证；"
+             "保存作用域=引用者包）。",
+         "inputSchema": _mcp_obj({
+             "asset_path": ASSET,
+             "max_attempts": P("integer", "Delete retry attempts (default 3) "
+                                          "| 删除重试次数")},
+             ["asset_path"])},
+        {"name": "ue5_start_pie",
+         "description":
+             "Start PIE (play/simulate) asynchronously. Poll with ue5_read_pie_state "
+             "until is_playing=true. Use to verify that logic actually RUNS, not just "
+             "that it compiles. | 启动 PIE/Simulate（异步；用 ue5_read_pie_state 轮询确认）。",
+         "inputSchema": _mcp_obj({
+             "mode": P("string", "'simulate' (default) | 'play' | 启动模式")})},
+        {"name": "ue5_stop_pie",
+         "description":
+             "Stop the running PIE/Simulate session. | 结束 PIE/Simulate 会话。",
          "inputSchema": _mcp_obj({})},
-        {"name": "ue5_pie_state",
-         "description": "PIE 状态：is_playing / 世界名 / 暂停 / 游戏时间",
+        {"name": "ue5_read_pie_state",
+         "description":
+             "Read PIE state: is_playing, world name, paused, game time. Poll this "
+             "after ue5_start_pie before reading runtime actors/properties. "
+             "| PIE 状态：is_playing / 世界名 / 暂停 / 游戏时间。",
          "inputSchema": _mcp_obj({})},
-        {"name": "ue5_pie_actors",
-         "description": "枚举 PIE 世界 Actor（运行时对象，路径含 UEDPIE_0_）",
-         "inputSchema": _mcp_obj({"actor_class": S, "name_filter": S, "limit": I})},
-        {"name": "ue5_pie_get_property",
-         "description": "读 PIE 中 Actor 属性（property_name 空 = 列候选属性名）",
-         "inputSchema": _mcp_obj({"actor_name": S, "property_name": S},
-                                  ["actor_name"])},
-        {"name": "ue5_pie_set_transform",
-         "description": "运行时传送 PIE Actor（location/rotation 至少一个）",
+        {"name": "ue5_list_pie_actors",
+         "description":
+             "Enumerate live Actors in the PIE world (runtime objects; their paths "
+             "contain UEDPIE_0_). Filter by actor_class and/or name_filter substring; "
+             "limit caps the result count. | 枚举 PIE 世界 Actor（运行时对象）。",
+         "inputSchema": _mcp_obj({
+             "actor_class": P("string", "Filter by class name, e.g. StaticMeshActor "
+                                        "| 按类名过滤"),
+             "name_filter": P("string", "Substring match on actor name | 名称子串过滤"),
+             "limit": P("integer", "Max actors returned (default 100) | 返回上限")})},
+        {"name": "ue5_read_pie_property",
+         "description":
+             "Read a runtime Actor property in PIE; omit property_name to list "
+             "candidate property names first. Use this to prove game logic ran (e.g. "
+             "health changed after a pickup). | 读 PIE 中 Actor 属性"
+             "（property_name 空 = 列候选属性名）。",
+         "inputSchema": _mcp_obj({
+             "actor_name": P("string", "Runtime actor name/label in PIE "
+                                       "| PIE 中 Actor 名"),
+             "property_name": P("string", "Property to read; empty = list candidates "
+                                          "| 属性名，空=列候选")},
+             ["actor_name"])},
+        {"name": "ue5_set_pie_transform",
+         "description":
+             "Teleport a PIE Actor at runtime (location and/or rotation, at least one), "
+             "with read-back verification of the new transform. "
+             "| 运行时传送 PIE Actor（location/rotation 至少一个；带回读验证）。",
          "inputSchema": _mcp_obj(
-             {"actor_name": S, "location": N3, "rotation": N3}, ["actor_name"])},
-        {"name": "ue5_logs",
-         "description": "读 UE 日志（cursor=0 取尾部；cursor>0 增量取新增；"
-                        "category/pattern 过滤）",
-         "inputSchema": _mcp_obj({"lines": I, "category": S, "pattern": S,
-                                  "cursor": I})},
-        {"name": "ue5_batch",
-         "description": "白名单命令批量执行（单次请求多步操作；任一步失败默认中止）",
-         "inputSchema": _mcp_obj(
-             {"steps": {"type": "array"}, "stop_on_error": B}, ["steps"])},
-        {"name": "ue5_command",
-         "description": ("白名单命令透传（59 条全量能力入口）。command ∈ "
+             {"actor_name": P("string", "Runtime actor name/label in PIE "
+                                        "| PIE 中 Actor 名"),
+              "location": V3,
+              "rotation": {"type": "array", "items": {"type": "number"},
+                           "description": "[pitch, yaw, roll]"}},
+             ["actor_name"])},
+        {"name": "ue5_read_logs",
+         "description":
+             "Read the UE log: cursor=0 returns the tail (last `lines`); cursor>0 "
+             "returns only new lines after that cursor (incremental polling). Filter "
+             "by category/pattern. Use for self-service cross-checks of any operation. "
+             "| 读 UE 日志（cursor=0 取尾部；cursor>0 增量取新增；category/pattern 过滤）。",
+         "inputSchema": _mcp_obj({
+             "lines": P("integer", "Tail size when cursor=0 (default 200) "
+                                   "| 尾部行数"),
+             "category": P("string", "Log category filter, e.g. LogBlueprint "
+                                     "| 日志类别过滤"),
+             "pattern": P("string", "Substring filter on the line | 行内容子串过滤"),
+             "cursor": P("integer", "Incremental cursor from a previous call "
+                                    "| 上次返回的增量游标")})},
+        {"name": "ue5_run_batch",
+         "description":
+             "Execute a whitelisted-command batch in one request (multi-step task in a "
+             "single round trip); stops on the first failing step by default. For a "
+             "single operation prefer the dedicated tool — this is for sequences. "
+             "| 白名单命令批量执行（单次请求多步；任一步失败默认中止）。",
+         "inputSchema": _mcp_obj({
+             "steps": P("array", "List of {command, params} steps | 步骤列表 "
+                                 "{command, params}"),
+             "stop_on_error": P("boolean", "Abort on first failure (default true) "
+                                           "| 失败即中止")},
+             ["steps"])},
+        {"name": "ue5_execute_command",
+         "description": ("Escape hatch: run any whitelisted bridge command by name — "
+                         "the full "
+                         + str(len(_COMMAND_WHITELIST))
+                         + "-command surface, including capabilities without a "
+                         "dedicated tool (materials, UMG widgets, and other advanced "
+                         "operations). Prefer the dedicated tool whenever one exists "
+                         "for the operation; this generic entry point is the last "
+                         "resort and its arguments are less validated. "
+                         "command ∈ "
                          + ", ".join(sorted(_COMMAND_WHITELIST.keys()))
-                         + "；params 为该命令入参对象。未登记命令 fail-loud 拒绝。"),
-         "inputSchema": _mcp_obj({"command": S, "params": {"type": "object"}},
-                                  ["command"])},
+                         + "；params 为该命令入参对象。未登记命令 fail-loud 拒绝。"
+                           "| 白名单命令透传（专用工具未覆盖时使用）。"),
+         "inputSchema": _mcp_obj({
+             "command": P("string", "Whitelisted command name (see description list) "
+                                    "| 白名单命令名（见描述中的全量清单）"),
+             "params": P("object", "Command arguments object | 该命令的入参对象")},
+             ["command"])},
     ]
     return TOOLS
 
@@ -9279,8 +9421,8 @@ def _mcp_impl_dispatch(name, args):
     if not isinstance(args, dict):
         args = {}
     simple = {
-        "ue5_health": lambda a: _get_ue_info(),
-        "ue5_diag": lambda a: bridge_diag(),
+        "ue5_check_health": lambda a: _get_ue_info(),
+        "ue5_run_diagnostics": lambda a: bridge_diag(),
         "ue5_list_assets": lambda a: _cmd_list_assets(a.get("path", "/Game/"),
                                                       a.get("recursive", True)),
         "ue5_read_blueprint": lambda a: read_blueprint(
@@ -9294,7 +9436,7 @@ def _mcp_impl_dispatch(name, args):
             a["bp_path"], a.get("graph_name", "EventGraph")),
         "ue5_build_blueprint": _mcp_impl_build,
         "ue5_build_batch": _mcp_impl_build_batch,
-        "ue5_compile": lambda a: _cmd_compile_blueprint(a["bp_path"]),
+        "ue5_compile_blueprint": lambda a: _cmd_compile_blueprint(a["bp_path"]),
         "ue5_connect_pins": lambda a: _gt_run_handler(
             _cmd_connect_pins, a["blueprint_path"], a.get("connections", [])),
         "ue5_disconnect_pin": lambda a: disconnect_pin(
@@ -9309,22 +9451,22 @@ def _mcp_impl_dispatch(name, args):
             a["asset_path"], a.get("only_if_is_dirty", False)),
         "ue5_delete_asset": lambda a: _cmd_delete_asset(
             a["asset_path"], a.get("max_attempts", 3)),
-        "ue5_pie_start": lambda a: _cmd_pie_start(a.get("mode", "simulate")),
-        "ue5_pie_stop": lambda a: _cmd_pie_stop(),
-        "ue5_pie_state": lambda a: _cmd_pie_state(),
-        "ue5_pie_actors": lambda a: _cmd_find_actors(
+        "ue5_start_pie": lambda a: _cmd_pie_start(a.get("mode", "simulate")),
+        "ue5_stop_pie": lambda a: _cmd_pie_stop(),
+        "ue5_read_pie_state": lambda a: _cmd_pie_state(),
+        "ue5_list_pie_actors": lambda a: _cmd_find_actors(
             a.get("actor_class", ""), a.get("name_filter", ""), "pie",
             a.get("limit", 100)),
-        "ue5_pie_get_property": lambda a: _cmd_get_actor_properties(
+        "ue5_read_pie_property": lambda a: _cmd_get_actor_properties(
             a["actor_name"], a.get("property_name", ""), "pie", 200),
-        "ue5_pie_set_transform": lambda a: _cmd_set_actor_transform(
+        "ue5_set_pie_transform": lambda a: _cmd_set_actor_transform(
             a["actor_name"], a.get("location"), a.get("rotation"), "pie"),
-        "ue5_logs": lambda a: _cmd_logs_read(
+        "ue5_read_logs": lambda a: _cmd_logs_read(
             a.get("lines", 200), a.get("category", ""), a.get("pattern", ""),
             a.get("cursor", 0)),
-        "ue5_batch": lambda a: _cmd_editor_batch(
+        "ue5_run_batch": lambda a: _cmd_editor_batch(
             a["steps"], a.get("stop_on_error", True)),
-        "ue5_command": _mcp_impl_command,
+        "ue5_execute_command": _mcp_impl_command,
     }
     return simple.get(name)
 

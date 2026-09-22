@@ -60,8 +60,8 @@ def test_initialize_and_tools_list_offline():
         catalog = tools["result"]["tools"]
         names = {t["name"] for t in catalog}
         assert len(catalog) >= 23
-        assert {"ue5_health", "ue5_build_blueprint", "ue5_pie_start",
-                "ue5_command"} <= names
+        assert {"ue5_check_health", "ue5_build_blueprint", "ue5_start_pie",
+                "ue5_execute_command"} <= names
         assert all("inputSchema" in t for t in catalog)
     finally:
         proc.kill()
@@ -74,7 +74,7 @@ def test_tools_call_offline_returns_clean_error():
     try:
         (resp,) = _roundtrip(proc, [
             {"jsonrpc": "2.0", "id": 7, "method": "tools/call",
-             "params": {"name": "ue5_health", "arguments": {}}},
+             "params": {"name": "ue5_check_health", "arguments": {}}},
         ], expect_n=1)
         assert resp["id"] == 7
         assert resp["error"]["code"] == -32000

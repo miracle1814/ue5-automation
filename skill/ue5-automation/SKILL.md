@@ -1,13 +1,14 @@
 # UE5.1 自动化工具 — 使用手册
 
 > **Skill 名称：** `ue5-automation`  
-> **版本：** v0.18（T-20260918-V32-UE58 · 5.8 桥编译实证 + extras 端到端验收；v0.17 为回读补强）
+> **版本：** v0.19（T-20260922-V33-MCP-TOOL-CATALOG · MCP 工具目录规范化：23 工具统一 verb_noun 命名 + 英文主描述（Use-when/返回形态）+ 参数级 schema 说明；v0.18 为 5.8 桥编译实证）
+> **历史版本记录：** v0.18（T-20260918-V32-UE58 · 5.8 桥编译实证 + extras 端到端验收；v0.17 为回读补强）
 > **历史版本记录：** v0.17（T-20260918-V301-READBACK · 回读置信度补强：UMG/材质设值回读比对 + FSlateColor 自适应；v0.16 为融合升级）
 > **历史版本记录：** v0.16（T-20260918-V3-FUSION · 融合升级：MCP 协议接入 + PIE 验证族 + 材质/UMG 新域 + 源码随包；v0.15 为独立验证轮）
 > **历史版本记录：** v0.15（T-20260918-VERIFY-FIX · 独立验证轮：缺陷族 E-1~E-10 修复 + 全库口径清理，见下方 v0.15 日志；v0.14 历史内容保留其后）
 > **历史版本记录：** v0.14（T-20260917-SKILL-CLEANUP-V219 · 蓝图缺陷 **D-5~D-8** 修复 + 文档/元数据口径清理：`/build` 的 `events[]` / `functions[]` **字段名契约对齐**（照文档写不再得空名）· `add_function_node` **回传 node GUID** · `delete_asset` **保存作用域收窄**（不再静默提交未保存关卡））  
 > **手册版本：** v2.3  
-> **更新日期：** 2026-09-18（v0.16）  
+> **更新日期：** 2026-09-22（v0.19）  
 > **适用 UE 版本：** **5.1.x 开箱即用**；5.2–5.5 需自行重编译 bridge；5.6+ 未验证 —— **升级路径与出口见 [`UE_VERSION_GUIDE.md`](UE_VERSION_GUIDE.md)**（随包）
 >
 > **📦 随包范围（第三方使用者必读）：** 发布包只含**运行时脚本**（`scripts/` / `templates/` / 文档）。`tests/`、`conftest.py`、`run_tests.bat` 属**开发端测试基建**，**默认不随发布包**（仅 `publish.py --with-tests` 时携带）——下文历史更新日志中出现的 `run_tests.bat` 命令均为**开发端**用法，第三方发布包内**无此文件**，请勿尝试执行。
@@ -35,7 +36,7 @@
 > - 包内 DLL 更新：**901,120 B · MD5 0434743859C997C5711519FCDD449F97**（+UMG 回读 API；5.1 已活体验证）。
 
 > ### v0.16 更新日志（T-20260918-V3-FUSION · 融合升级：MCP 协议接入 + 编辑器广度能力 + 材质/UMG 新域）
-> - 🚀 **MCP 协议接入层（`/mcp` 端点 · 零依赖手写）**：官方 mcp SDK 需 Python ≥3.10，而 UE5.1 内嵌 Python 为 3.9 → 手写最小 MCP（JSON-RPC 2.0 / Streamable HTTP：initialize 版本协商 · tools/list · tools/call · ping · notifications 202 · resources/prompts 空列表）。**23 个 MCP 工具**（诊断/读写/构建/PIE/日志/批量 + `ue5_command` 白名单透传，描述含全量命令名）；鉴权新增 `Authorization: Bearer` 与 `?token=` 双兼容通道（原 X-Skill-Token 不变）。任何 MCP 客户端（ZCode/Claude 等）可直连 **UE 5.1–5.5** 编辑器 —— 接入文档见 `docs/MCP-ACCESS.md`。
+> - 🚀 **MCP 协议接入层（`/mcp` 端点 · 零依赖手写）**：官方 mcp SDK 需 Python ≥3.10，而 UE5.1 内嵌 Python 为 3.9 → 手写最小 MCP（JSON-RPC 2.0 / Streamable HTTP：initialize 版本协商 · tools/list · tools/call · ping · notifications 202 · resources/prompts 空列表）。**23 个 MCP 工具**（诊断/读写/构建/PIE/日志/批量 + `ue5_execute_command` 白名单透传，描述含全量命令名）；鉴权新增 `Authorization: Bearer` 与 `?token=` 双兼容通道（原 X-Skill-Token 不变）。任何 MCP 客户端（ZCode/Claude 等）可直连 **UE 5.1–5.5** 编辑器 —— 接入文档见 `docs/MCP-ACCESS.md`。
 > - 🎯 **编辑器广度能力（移植自官方 MCP 验证范式）**：
 >   - **PIE 运行时验证族**：`pie_start(mode=simulate|pie)` · `pie_stop` · `pie_state` —— 跨库候选链实测修正（UE5.1：`editor_play_simulate` 在 EditorLevelLibrary，`editor_request_end_play`/`is_in_play_in_editor` 在 LevelEditorSubsystem，`editor_end_play` 才是 ELL 的停止名——旧单库探测全 missing）；**实测：PIE 期间 HTTP bridge 存活**（运行时读属性/传送全通）。
 >   - **Actor 基础族**：`find_actors` · `spawn_actor`（新增 `mobility` 参数）· `set_actor_transform` · `get_actor_properties`（world=editor|pie）。

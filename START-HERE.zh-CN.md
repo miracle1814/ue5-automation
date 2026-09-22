@@ -58,7 +58,7 @@ ZCode：`%USERPROFILE%\.zcode\cli\config.json` 的 `mcp.servers` 加：
 }
 ```
 
-连上后 AI 获得 **23 个 MCP 工具**（含 `ue5_build_blueprint` / `ue5_pie_start` / `ue5_logs` / `ue5_batch` / `ue5_command` 全量透传）+ 72 条白名单命令。
+连上后 AI 获得 **23 个 MCP 工具**（含 `ue5_build_blueprint` / `ue5_start_pie` / `ue5_read_logs` / `ue5_run_batch` / `ue5_execute_command` 全量透传）+ 72 条白名单命令。
 > 详细配置（Claude 等其他客户端 / 无反代客户端用 `?token=` 兜底）见 `skill/ue5-automation/docs/MCP-ACCESS.md`。
 
 ### B. 脚本 / 命令行
@@ -78,10 +78,10 @@ python blueprint_editor.py update /Game/BP_X 打印字符串 InString "Hello"
 | # | 阶段 | 工具动作 | 判据 |
 |:--|:--|:--|:--|
 | 1 | **需求分析** | 大模型理解用户描述（"做一个可拾取物品/做一个 HUD/查这个报错"） | 输出方案步骤 |
-| 2 | **环境预检** | `ue5_health` → `check_ue_version.py`；写操作前 `ensure_http_bridge` | bridge_apis 非空 |
+| 2 | **环境预检** | `ue5_check_health` → `check_ue_version.py`；写操作前 `ensure_http_bridge` | bridge_apis 非空 |
 | 3 | **读取现状** | `ue5_read_blueprint` / `ue5_read_nodes`（GUID/标题） | 拿到目标节点清单 |
-| 4 | **执行变更** | `ue5_build_blueprint`（从零）或 `ue5_command` 系列（增量：连线/改参/删节点/建材质/建 UMG） | 每步 fail-loud 返回 |
-| 5 | **行为验证** | `ue5_pie_start` → `ue5_pie_state` → `ue5_pie_actors`/`ue5_pie_get_property`（读运行时状态；需要位移时 `ue5_pie_set_transform` 带**回读比对**）→ `ue5_pie_stop` | 运行时属性符合预期 = 真验证 |
+| 4 | **执行变更** | `ue5_build_blueprint`（从零）或 `ue5_execute_command` 系列（增量：连线/改参/删节点/建材质/建 UMG） | 每步 fail-loud 返回 |
+| 5 | **行为验证** | `ue5_start_pie` → `ue5_read_pie_state` → `ue5_list_pie_actors`/`ue5_read_pie_property`（读运行时状态；需要位移时 `ue5_set_pie_transform` 带**回读比对**）→ `ue5_stop_pie` | 运行时属性符合预期 = 真验证 |
 | 6 | **交付产出** | 分析/创建/诊断/架构报告（Markdown + Mermaid）；事务日志 `logs/blueprint_editor.jsonl` | 报告落盘 |
 | 7 | **清理** | `ue5_delete_asset`（保存作用域=引用者包，绝不全工程保存） | 删后回读不存在 |
 
@@ -96,11 +96,11 @@ python blueprint_editor.py update /Game/BP_X 打印字符串 InString "Hello"
 | ✏️ 增量修改 | 改引脚默认值 / 连线（三重验证）/ 断线 / 删节点（引用检查）/ 事务回滚 | `connect_pins` `disconnect` `delete_node` + `rollback()` |
 | 🎨 材质 | 建材质→加表达式（参数/运算/采样）→连主属性→编译→建实例改参 | `material_*` 9 条 |
 | 🧩 UMG 控件蓝图 | 建控件蓝图→搭控件树（Panel/Text/Button…）→设属性→读树→图内逻辑复用蓝图能力 | `widget_*` 4 条 |
-| ▶️ PIE 运行时验证 | 启动/状态/运行时对象枚举/属性读取/传送回读/停止 | `ue5_pie_*` 6 个工具 |
+| ▶️ PIE 运行时验证 | 启动/状态/运行时对象枚举/属性读取/传送回读/停止 | PIE 6 个工具（`ue5_start_pie` · `ue5_read_pie_state` · `ue5_read_pie_property` · `ue5_set_pie_transform` 等） |
 | 🖥️ Actor / 关卡 | 查询、生成（可选 mobility）、变换、读属性 | `find_actors` `spawn_actor` `set_actor_transform` `get_actor_properties` |
 | 🩺 报错诊断 | 日志解析 + 19 条错误模式库 + 自取日志 | `logs_read` + `log_parser.py` |
 | 📐 项目评估 | 全项目扫描：数量/复杂度/耦合/循环依赖/热力图 | `analyzer.py` |
-| ⚡ 批量执行 | 多条命令单次执行（多步任务压成一次往返） | `ue5_batch` / `editor_batch` |
+| ⚡ 批量执行 | 多条命令单次执行（多步任务压成一次往返） | `ue5_run_batch` / `editor_batch` |
 
 ## 六、版本矩阵（如实声明）
 

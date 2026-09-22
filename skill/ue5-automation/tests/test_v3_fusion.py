@@ -105,8 +105,8 @@ class TestMcpProtocol:
     def test_tools_list_has_key_tools(self):
         r = _rpc("tools/list", {})
         names = [t["name"] for t in r.json()["result"]["tools"]]
-        for must in ("ue5_health", "ue5_build_blueprint", "ue5_connect_pins",
-                     "ue5_pie_state", "ue5_logs", "ue5_batch", "ue5_command"):
+        for must in ("ue5_check_health", "ue5_build_blueprint", "ue5_connect_pins",
+                     "ue5_read_pie_state", "ue5_read_logs", "ue5_run_batch", "ue5_execute_command"):
             assert must in names, must
         # 每个工具都有 inputSchema
         for t in r.json()["result"]["tools"]:
@@ -115,12 +115,12 @@ class TestMcpProtocol:
     def test_tools_list_command_description_contains_full_whitelist(self):
         r = _rpc("tools/list", {})
         cmd_tool = [t for t in r.json()["result"]["tools"]
-                    if t["name"] == "ue5_command"][0]
+                    if t["name"] == "ue5_execute_command"][0]
         for c in V3_NEW_COMMANDS:
             assert c in cmd_tool["description"], c
 
     def test_tools_call_health(self):
-        r = _call_tool("ue5_health")
+        r = _call_tool("ue5_check_health")
         body = r.json()
         assert body["result"]["isError"] is False
         payload = json.loads(body["result"]["content"][0]["text"])
@@ -171,18 +171,18 @@ class TestMcpAuth:
 
 class TestMcpCommandPassthrough:
     def test_command_health_ok(self):
-        res = _tool_text(_call_tool("ue5_command", {"command": "health"}))
+        res = _tool_text(_call_tool("ue5_execute_command", {"command": "health"}))
         assert res["success"] is True
 
     def test_command_unknown_fail_loud(self):
-        r = _call_tool("ue5_command", {"command": "drop_database"})
+        r = _call_tool("ue5_execute_command", {"command": "drop_database"})
         body = r.json()
         assert body["result"]["isError"] is True
         txt = body["result"]["content"][0]["text"]
         assert "Unknown command" in txt
 
     def test_batch_tool_stops_on_failure(self):
-        res = _tool_text(_call_tool("ue5_batch", {
+        res = _tool_text(_call_tool("ue5_run_batch", {
             "steps": [
                 {"command": "health"},
                 {"command": "drop_database"},

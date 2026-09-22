@@ -39,7 +39,7 @@ if SCRIPTS_DIR not in sys.path:
 
 BRIDGE_URL = os.environ.get("UE5_BRIDGE_URL", "http://127.0.0.1:8889/mcp")
 SERVER_NAME = "ue5-automation"
-SERVER_VERSION = "3.2"
+SERVER_VERSION = "3.3"
 SUPPORTED_PROTOCOL_VERSIONS = ("2024-11-05", "2025-03-26", "2025-06-18")
 DEFAULT_PROTOCOL_VERSION = "2025-06-18"
 RELAY_TIMEOUT = (10, 600)  # 连接快速失败 / 读超时容忍长编译

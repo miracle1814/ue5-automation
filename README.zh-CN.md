@@ -5,7 +5,9 @@
 > 让 AI Agent（或脚本）**真正操作 UE 编辑器**：读蓝图、从零建蓝图、增量改蓝图、
 > 建材质、建 UMG 控件蓝图、PIE 运行时验证、报错诊断、项目评估。
 >
-> **版本 v3.2**（2026-09-18）· 支持 **UE 5.1 – 5.8**（5.1 与 5.8 随包预编译桥，零编译）
+> **版本 v3.3**（2026-09-22）· 支持 **UE 5.1 – 5.8**（5.1 与 5.8 随包预编译桥，零编译）
+>
+> [![miracle1814/ue5-automation MCP server](https://glama.ai/mcp/servers/miracle1814/ue5-automation/badges/score.svg)](https://glama.ai/mcp/servers/miracle1814/ue5-automation)
 >
 > English: [README.md](README.md) · 快速开始：[START-HERE.zh-CN.md](START-HERE.zh-CN.md)
 
@@ -91,8 +93,8 @@ python ue5_runner.py health       :: 链路健康检查（输出 bridge_apis 列
     }
     ```
 
-  - 连上即得 **23 个 MCP 工具**（`ue5_build_blueprint` / `ue5_pie_*` / `ue5_logs` /
-    `ue5_batch` / `ue5_command` 全量透传）+ 72 条白名单命令。
+  - 连上即得 **23 个 MCP 工具**（`ue5_build_blueprint` / `ue5_start_pie` / `ue5_read_logs` /
+    `ue5_run_batch` / `ue5_execute_command` 全量透传）+ 72 条白名单命令。
   - 详细配置见 `skill/ue5-automation/docs/MCP-ACCESS.md`。
 - **UE 5.8**：引擎自带官方 MCP 服务器（`http://127.0.0.1:8000/mcp`，需在项目设置开
   `bAutoStartServer=True`）+ 安装 `bridge/ue58-extras/` 插件（8 个工具；配合随包
