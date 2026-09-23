@@ -2,6 +2,51 @@
 
 以下为主要变化摘要。
 
+## [3.3.1] — 2026-09-23（skill v0.20）
+- **材质族写操作补回读验证（把蓝图侧的 P04 教训平移过来）**：
+  蓝图侧早已证实「引擎 API 的 bool 返回值会说谎」（`TryCreateConnection` 是
+  *可行性验证* API，类型不匹配时建隐式 Cast 节点仍返回 True → 现走四重验证）。
+  材质侧 `connect_material_expressions` / `connect_material_property` 是**同类
+  API**，原先只判返回值 → 同一类假阳性无防护。本次补齐：
+  - `material_add_expression`：回读确认表达式真的出现在材质表达式清单中；
+  - `material_connect_expressions`：回读目标输入引脚实际连到的表达式并比对，
+    另检测「连线后新增表达式」= 引擎插入的隐式类型转换节点（P04 同类信号）；
+  - `material_connect_property`：回读材质主属性（`base_color` 等）实际连到的表达式。
+  降级口径对齐 `_pywrap_readback_nodes` 的 R1 策略：**能读到就严格比对，读不到
+  只记 `warnings` 不阻断**（避免非 GameThread 等场景制造假阴性）。返回体新增
+  `verified` 字段，使"验证没发生"成为可被 agent 检查的一等信号。
+  ⚠️ **语义边界**：`verified` 与 `warnings` **解耦**——它只回答"回读比对是否
+  执行且通过"，**不因非致命告警变 false**（例：检测到引擎插入的隐式转换节点时，
+  连线本身已按引脚比对通过 → `verified=true` + 一条 warning）。比对读不到时
+  才 `verified=false` + 告警。
+- **`widget_add_child` 补回读**：用 `read_widget_tree` 确认控件真的进了树。
+  同族 `widget_set_property` 早有 `ReadWidgetProperty` 回读，本条原先缺失 →
+  族内验证密度不一致。
+- **`material_compile` 修 `is False` 漏判**：原写法 `if ok is False` 会放过
+  `None`（引擎 API 失败路径返回 None 是常态）→ 把未编译报成 `compiled:True`。
+  改为与全项目一致的 `if not ok`，错误文本附实收值。
+- **`compile_blueprint` 补 `success` 键（MCP `isError` 漏点修复）**：
+  MCP 层判据是 `result.get("success") is False`，而该命令只报 `compiled:false`
+  → **编译失败会以 `isError:false` 返回客户端**，agent 据 `isError` 判定时会当成功
+  （ibrews 手册 §9.4「Treat isError as load-bearing」即此约定）。现补 `success`。
+- **MCP 层 `is_err` 同时认 `success` 与 `ok`**：蓝图节点/变量/组件族共 36 条写命令
+  的返回体只有 `ok`（`_pywrap_ctor_result` / `_pywrap_node_result`），原先只判
+  `success` → 这些命令一旦改成「返回 `ok:False` 而非 raise」就会静默假成功。
+  当前它们靠 raise 兜住，本次把这条隐式契约显式化。
+- **测试基础设施：`fake_unreal.py` 补材质/控件族替身**（原先 `grep -ci material` = 0）
+  → 材质族此前**零离线用例**，这是「验证密度低于蓝图族」的直接原因。新增：
+  `FakeMaterial` / `FakeMaterialExpression` / `FakeExpressionInput` /
+  `MaterialEditingLibrary` / `MaterialProperty` / `FakeWidgetBlueprint`，
+  以及 8 个故障注入开关（`set_mat_connect_false_positive` 复现 P04 类假阳性、
+  `set_mat_add_expression_drop`、`set_mat_insert_converter`、
+  `set_mat_readback_unavailable` / `set_mat_verify_unavailable`、
+  `set_mat_compile_result`、`set_mat_widget_add_drop` / `set_mat_widget_prop_drop`）。
+  顺带修 `FakeClass.get_path_name()` 缺失（真实 UClass 有）。
+- 新增 `tests/test_mat_readback.py`：**25 个用例**，覆盖正路径 / 假阳性 fail-loud /
+  隐式转换告警 / 回读降级（连线与主属性两路）/ `verified` 语义边界回归 /
+  `None` 漏判回归 / `success` 键回归 / MCP `isError` 契约。
+- 离线回归：**504 通过 / 0 失败**（95 跳过 = 需活体编辑器的在线用例；基线 479）。
+
 ## [3.3] — 2026-09-22（skill v0.19）
 - **MCP 工具目录规范化（面向 AI 客户端的工具选择质量）**：
   - 命名统一为 `ue5_<verb>_<noun>`：`ue5_health→ue5_check_health`、`ue5_diag→ue5_run_diagnostics`、

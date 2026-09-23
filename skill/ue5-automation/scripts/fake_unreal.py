@@ -32,9 +32,38 @@ import uuid
 # 全局状态（fake 资产库 + 故障注入标志）
 # ══════════════════════════════════════════════════════════
 
-_FAKE_ASSETS = {}            # 资产路径 → FakeBlueprint
+_FAKE_ASSETS = {}            # 资产路径 → FakeBlueprint / FakeMaterial / FakeWidgetBlueprint
 _FAKE_FAIL_BREAK = False     # 故障注入：break_link_to 抛异常
 _ASSET_LOCK = threading.RLock()
+
+# ── 材质族故障注入开关（v3.3.1 回读验证用）──────────────────────────
+MAT_CONNECT_FALSE_POSITIVE = False   # connect_* 返回 True 但不建立连接（P04 类比）
+MAT_ADD_EXPRESSION_DROP = False      # create_material_expression 返回对象但不落图
+MAT_INSERT_CONVERTER = False         # connect 成功但额外插入一个转换表达式
+MAT_READBACK_UNAVAILABLE = False     # 回读通道完全不可用（连表达式枚举都失败）
+MAT_VERIFY_UNAVAILABLE = False       # 仅"引脚级"验证通道不可用（枚举仍可用）
+MAT_COMPILE_RESULT = True            # recompile_material 返回值（None/False/True）
+MAT_WIDGET_ADD_DROP = False          # add_widget_to_tree 报成功但不落树
+MAT_WIDGET_PROP_DROP = False         # set_widget_property 报成功但不写入
+
+# 材质表达式类的输入引脚名表（get_inputs_for_material_expression 用）
+_MAT_EXPR_INPUTS = {
+    "MaterialExpressionMultiply": ["A", "B"],
+    "MaterialExpressionAdd": ["A", "B"],
+    "MaterialExpressionConstant": [],
+    "MaterialExpressionScalarParameter": [],
+    "MaterialExpressionVectorParameter": [],
+    "MaterialExpressionTextureSample": ["Coordinates", "Texture"],
+    "MaterialExpressionLinearInterpolate": ["A", "B", "Alpha"],
+    "MaterialExpressionFresnel": ["ExponentIn", "BaseReflectFractionIn", "Normal"],
+}
+
+# UMaterial 主属性的 UPROPERTY 名（与 ue5_bridge._MAT_PROP_MAP 的 MP_* 一一对应）
+_MAT_PROP_ATTRS = [
+    "base_color", "metallic", "specular", "roughness", "emissive_color",
+    "opacity", "opacity_mask", "normal", "world_position_offset",
+    "ambient_occlusion", "refraction", "displacement",
+]
 
 # ══════════════════════════════════════════════════════════
 # 数据模型
@@ -292,6 +321,10 @@ class FakeClass:
     def get_name(self):
         return self._name
 
+    def get_path_name(self):
+        """真实 UClass 的 get_path_name()；材质族返回类路径时依赖它。"""
+        return "/Script/Engine." + str(self._name)
+
 
 class FakeCDO:
     def __init__(self, bp):
@@ -343,6 +376,91 @@ class BlueprintPythonBridge:
     def load_blueprint_asset(path):
         with _ASSET_LOCK:
             return _FAKE_ASSETS.get(path)
+
+    @staticmethod
+    def get_material_expressions(mat):
+        """GetMaterialExpressions 替身（v3.0 桥 API，材质表达式枚举唯一通路）。"""
+        if mat is None:
+            return []
+        if MAT_READBACK_UNAVAILABLE:
+            raise RuntimeError("fake: get_material_expressions 回读通道不可用（注入）")
+        with _ASSET_LOCK:
+            return list(getattr(mat, "_expressions", []))
+
+    @staticmethod
+    def read_widget_tree(wp):
+        """ReadWidgetTree 替身 → [{widget_name, widget_class, parent_name}]。
+
+        `MAT_READBACK_UNAVAILABLE` 置位时抛异常 → 驱动调用方的告警降级路径。
+        """
+        if MAT_READBACK_UNAVAILABLE:
+            raise RuntimeError("fake: read_widget_tree 回读通道不可用（注入）")
+        if wp is None:
+            return []
+        out = []
+        with _ASSET_LOCK:
+            for it in getattr(wp, "_widgets", []):
+                out.append(FakeWidgetInfo(it["name"], it["class"], it["parent"]))
+        return out
+
+    @staticmethod
+    def add_widget_to_tree(wp, parent_name, widget_class, widget_name):
+        """AddWidgetToTree 替身。语义：'' = 成功 / 非空 str = 失败文本 / None = 失败无文本。
+
+        `MAT_WIDGET_ADD_DROP` 置位 → 返回 ''（报成功）但**不落树**，
+        复现「API 报成功但未生效」，用于验证回读 fail-loud。
+        """
+        if wp is None:
+            return "控件蓝图为空"
+        if not MAT_WIDGET_ADD_DROP:
+            with _ASSET_LOCK:
+                wp._widgets.append({
+                    "name": str(widget_name),
+                    "class": str(widget_class),
+                    "parent": str(parent_name or ""),
+                    "props": {},
+                })
+        return ""
+
+    @staticmethod
+    def create_widget_blueprint(package_path, asset_name):
+        """CreateWidgetBlueprint 替身 → 新建并注册控件蓝图。"""
+        pkg = str(package_path or "/Game/Test").rstrip("/")
+        full = "%s/%s" % (pkg, asset_name)
+        wp = FakeWidgetBlueprint(full)
+        with _ASSET_LOCK:
+            _FAKE_ASSETS[full] = wp
+        return wp
+
+    @staticmethod
+    def set_widget_property(wp, widget_name, property_name, value):
+        """SetWidgetProperty 替身。语义：'' = 成功 / 非空 str = 失败+错误文本。
+
+        `MAT_WIDGET_PROP_DROP` 置位 → 报成功但不写入（验证 ReadWidgetProperty 回读）。
+        """
+        if wp is None:
+            return "控件蓝图为空"
+        with _ASSET_LOCK:
+            for it in wp._widgets:
+                if it["name"] == str(widget_name):
+                    if not MAT_WIDGET_PROP_DROP:
+                        it["props"][str(property_name)] = str(value)
+                    return ""
+        return "控件未找到: %s" % widget_name
+
+    @staticmethod
+    def read_widget_property(wp, widget_name, property_name):
+        """ReadWidgetProperty 替身。语义：恒 True，OutValue = 导出文本 /
+        失败时 "ERROR: <原因>"（与 C++ 侧 ReadWidgetProperty 契约一致）。"""
+        if wp is None:
+            return True, "ERROR: 控件蓝图为空"
+        with _ASSET_LOCK:
+            for it in wp._widgets:
+                if it["name"] == str(widget_name):
+                    if str(property_name) in it["props"]:
+                        return True, it["props"][str(property_name)]
+                    return True, "ERROR: 属性未设置: %s" % property_name
+        return True, "ERROR: 控件未找到: %s" % widget_name
 
     @staticmethod
     def get_all_graphs(bp):
@@ -1398,6 +1516,7 @@ def reset_fake():
     set_timeline_pin_limit(None)
     set_comment_text_drop(False)
     _reset_l2_faults()   # L2：恢复 21 项替身故障开关
+    _reset_mat_faults()  # 材质/控件族：恢复回读故障开关
 
 
 def add_test_node(graph, title, node_class="K2Node_CallFunction", x=0, y=0, pins=None):
@@ -1463,6 +1582,282 @@ def set_comment_text_drop(fail=True):
 def get_asset(path):
     with _ASSET_LOCK:
         return _FAKE_ASSETS.get(path)
+
+
+# ══════════════════════════════════════════════════════════
+#  材质族替身（v3.3.1）
+#  动机：材质族原先在替身里**完全没有建模**（`grep -ci material` = 0），
+#  因此也没有任何离线用例 → 是"验证密度低于蓝图族"的直接原因。
+#  本段补齐 MaterialEditingLibrary 的最小可执行面，使回读路径可离线验证。
+# ══════════════════════════════════════════════════════════
+
+class FakeExpressionInput:
+    """模拟 FExpressionInput（材质引脚）。
+
+    `expression` 为 None 表示未连线 —— 与真实 UE 语义一致，回读方据此判定。
+    """
+
+    def __init__(self, expression=None):
+        self.expression = expression
+
+    def get_expression(self):
+        return self.expression
+
+
+class FakeMaterialExpression:
+    """模拟 UMaterialExpression（含输入引脚回读面）。"""
+
+    def __init__(self, name, cls_name="MaterialExpressionConstant"):
+        self._name = name
+        self._cls = cls_name
+        self._props = {}
+        self._inputs = {}
+        for nm in _MAT_EXPR_INPUTS.get(cls_name, []):
+            self._inputs[nm] = FakeExpressionInput(None)
+
+    def get_name(self):
+        return self._name
+
+    def get_path_name(self):
+        return "/Script/Engine." + self._cls
+
+    def get_editor_property(self, name):
+        # 输入引脚（回读连线目标）
+        if name in self._inputs:
+            if MAT_VERIFY_UNAVAILABLE:
+                raise RuntimeError("fake: 引脚 %r 回读通道不可用（注入）" % name)
+            return self._inputs[name]
+        if name in self._props:
+            return self._props[name]
+        raise AttributeError(
+            "fake: %s 无可读属性 %r（可用输入: %s）"
+            % (self._cls, name, sorted(self._inputs)))
+
+    def set_editor_property(self, name, value):
+        self._props[name] = value
+
+
+class FakeMaterial:
+    """模拟 UMaterial（表达式清单 + 主属性输入回读面）。"""
+
+    def __init__(self, path):
+        self._path = path
+        self._expressions = []
+        self._seq = 0
+        # 主属性输入（回读 connect_material_property 的目标）
+        self._prop_inputs = {a: FakeExpressionInput(None) for a in _MAT_PROP_ATTRS}
+
+    def get_name(self):
+        return self._path.rsplit("/", 1)[-1].split(".")[0]
+
+    def get_path_name(self):
+        return self._path
+
+    def get_editor_property(self, name):
+        if name in self._prop_inputs:
+            if MAT_VERIFY_UNAVAILABLE:
+                raise RuntimeError("fake: 主属性 %r 回读通道不可用（注入）" % name)
+            return self._prop_inputs[name]
+        raise AttributeError("fake: UMaterial 无可读属性 %r" % name)
+
+    def _next_name(self, cls_name):
+        self._seq += 1
+        short = cls_name.replace("MaterialExpression", "") or "Expr"
+        return "%s_%d" % (short, self._seq)
+
+
+class FakeWidgetInfo:
+    """模拟 FBPWidgetInfo（ReadWidgetTree 返回结构）。"""
+
+    def __init__(self, name, cls, parent):
+        self.widget_name = name
+        self.widget_class = cls
+        self.parent_name = parent
+
+
+class FakeWidgetBlueprint:
+    """模拟 UWidgetBlueprint（控件树回读面）。"""
+
+    def __init__(self, path):
+        self._path = path
+        self._widgets = []
+
+    def get_name(self):
+        return self._path.rsplit("/", 1)[-1].split(".")[0]
+
+    def get_path_name(self):
+        return self._path
+
+
+class MaterialProperty:
+    """模拟 unreal.MaterialProperty 枚举（_mat_prop_enum 依赖）。"""
+    MP_BASE_COLOR = "MP_BASE_COLOR"
+    MP_METALLIC = "MP_METALLIC"
+    MP_SPECULAR = "MP_SPECULAR"
+    MP_ROUGHNESS = "MP_ROUGHNESS"
+    MP_EMISSIVE_COLOR = "MP_EMISSIVE_COLOR"
+    MP_OPACITY = "MP_OPACITY"
+    MP_OPACITY_MASK = "MP_OPACITY_MASK"
+    MP_NORMAL = "MP_NORMAL"
+    MP_WORLD_POSITION_OFFSET = "MP_WORLD_POSITION_OFFSET"
+    MP_AMBIENT_OCCLUSION = "MP_AMBIENT_OCCLUSION"
+    MP_REFRACTION = "MP_REFRACTION"
+    MP_DISPLACEMENT = "MP_DISPLACEMENT"
+
+
+class MaterialEditingLibrary:
+    """模拟 unreal.MaterialEditingLibrary（ue5_bridge 材质族依赖的子集）。"""
+
+    @staticmethod
+    def create_material_expression(mat, cls, x=0, y=0):
+        if mat is None:
+            return None
+        cls_name = cls.get_name() if hasattr(cls, "get_name") else str(cls)
+        expr = FakeMaterialExpression(mat._next_name(cls_name), cls_name)
+        expr._owner_material = mat   # connect_material_property 需要反查宿主材质
+        if not MAT_ADD_EXPRESSION_DROP:
+            with _ASSET_LOCK:
+                mat._expressions.append(expr)
+        return expr
+
+    @staticmethod
+    def get_inputs_for_material_expression(mat, expr):
+        if expr is None:
+            return []
+        if MAT_READBACK_UNAVAILABLE or MAT_VERIFY_UNAVAILABLE:
+            raise RuntimeError("fake: get_inputs_for_material_expression 不可用（注入）")
+        return list(getattr(expr, "_inputs", {}).keys())
+
+    @staticmethod
+    def connect_material_expressions(src, src_output, dst, dst_input):
+        if src is None or dst is None:
+            return False
+        if MAT_CONNECT_FALSE_POSITIVE:
+            # P04 类比：报成功但不建立连接
+            return True
+        inputs = list(getattr(dst, "_inputs", {}).keys())
+        if not inputs:
+            return False
+        target = str(dst_input or "") or inputs[0]
+        if target not in dst._inputs:
+            return False
+        with _ASSET_LOCK:
+            dst._inputs[target].expression = src
+            if MAT_INSERT_CONVERTER and src._cls != dst._cls:
+                # 复现"引擎插入隐式类型转换节点"：**材质**的表达式清单多一个
+                holder = (getattr(src, "_owner_material", None)
+                          or getattr(dst, "_owner_material", None))
+                if holder is not None:
+                    conv = FakeMaterialExpression(
+                        holder._next_name("MaterialExpressionMultiply"),
+                        "MaterialExpressionMultiply")
+                    conv._owner_material = holder
+                    holder._expressions = list(holder._expressions) + [conv]
+        return True
+
+    @staticmethod
+    def connect_material_property(src, src_output, prop_enum):
+        if src is None or prop_enum is None:
+            return False
+        if MAT_CONNECT_FALSE_POSITIVE:
+            return True
+        attr = str(prop_enum)[3:].lower() if str(prop_enum).startswith("MP_") else None
+        if attr is None:
+            return False
+        holder = getattr(src, "_owner_material", None)
+        if holder is None:
+            return False
+        with _ASSET_LOCK:
+            holder._prop_inputs[attr].expression = src
+        return True
+
+    @staticmethod
+    def recompile_material(mat):
+        return MAT_COMPILE_RESULT
+
+
+# ── 材质/控件族故障注入开关 ──────────────────────────────
+
+def set_mat_connect_false_positive(fail=True):
+    """故障注入：材质 connect_* 返回 True 但不建立连接（P04 类比）。"""
+    global MAT_CONNECT_FALSE_POSITIVE
+    MAT_CONNECT_FALSE_POSITIVE = bool(fail)
+
+
+def set_mat_add_expression_drop(fail=True):
+    """故障注入：create_material_expression 返回对象但不落图。"""
+    global MAT_ADD_EXPRESSION_DROP
+    MAT_ADD_EXPRESSION_DROP = bool(fail)
+
+
+def set_mat_insert_converter(fail=True):
+    """故障注入：connect 成功但额外插入转换表达式（隐式 Cast 类比）。"""
+    global MAT_INSERT_CONVERTER
+    MAT_INSERT_CONVERTER = bool(fail)
+
+
+def set_mat_readback_unavailable(fail=True):
+    """故障注入：材质/控件回读通道完全不可用（验证告警降级而非阻断）。"""
+    global MAT_READBACK_UNAVAILABLE
+    MAT_READBACK_UNAVAILABLE = bool(fail)
+
+
+def set_mat_verify_unavailable(fail=True):
+    """故障注入：仅引脚级验证通道不可用（表达式枚举仍可用）。
+
+    用于验证"连线回读读不到 → 记 warning 而非误判失败"的降级路径。
+    """
+    global MAT_VERIFY_UNAVAILABLE
+    MAT_VERIFY_UNAVAILABLE = bool(fail)
+
+
+def set_mat_compile_result(value=True):
+    """故障注入：覆写 recompile_material 返回值（None 复现 is-False 漏判）。"""
+    global MAT_COMPILE_RESULT
+    MAT_COMPILE_RESULT = value
+
+
+def set_mat_widget_add_drop(fail=True):
+    """故障注入：add_widget_to_tree 报成功但不落树。"""
+    global MAT_WIDGET_ADD_DROP
+    MAT_WIDGET_ADD_DROP = bool(fail)
+
+
+def set_mat_widget_prop_drop(fail=True):
+    """故障注入：set_widget_property 报成功但不写入（验证属性回读）。"""
+    global MAT_WIDGET_PROP_DROP
+    MAT_WIDGET_PROP_DROP = bool(fail)
+
+
+def _reset_mat_faults():
+    """恢复全部材质族故障注入开关（供 reset_fake 调用）。"""
+    global MAT_CONNECT_FALSE_POSITIVE, MAT_ADD_EXPRESSION_DROP
+    global MAT_INSERT_CONVERTER, MAT_READBACK_UNAVAILABLE, MAT_VERIFY_UNAVAILABLE
+    global MAT_COMPILE_RESULT, MAT_WIDGET_ADD_DROP, MAT_WIDGET_PROP_DROP
+    MAT_CONNECT_FALSE_POSITIVE = False
+    MAT_ADD_EXPRESSION_DROP = False
+    MAT_INSERT_CONVERTER = False
+    MAT_READBACK_UNAVAILABLE = False
+    MAT_VERIFY_UNAVAILABLE = False
+    MAT_COMPILE_RESULT = True
+    MAT_WIDGET_ADD_DROP = False
+    MAT_WIDGET_PROP_DROP = False
+
+
+def create_test_material(path="/Game/Test/M_Test"):
+    """建一个测试材质并注册进 fake 资产库。"""
+    mat = FakeMaterial(path)
+    with _ASSET_LOCK:
+        _FAKE_ASSETS[path] = mat
+    return mat
+
+
+def create_test_widget(path="/Game/Test/WBP_Test"):
+    """建一个测试控件蓝图并注册进 fake 资产库。"""
+    wp = FakeWidgetBlueprint(path)
+    with _ASSET_LOCK:
+        _FAKE_ASSETS[path] = wp
+    return wp
 
 
 # 模块导入时确保初始状态干净

@@ -360,14 +360,31 @@ class TestMaterialWidgetRouting:
             assert c in ue5_bridge._COMMAND_WHITELIST, c
 
     def test_widget_read_tree_fail_loud_without_bridge(self):
-        """fake 环境无 BlueprintPythonBridge → 必须可读 fail-loud（不假成功）。"""
-        r = client.post("/command", json={
-            "command": "widget_read_tree",
-            "params": {"widget_path": "/Game/X/WBP_X"}}, headers=TOKEN)
-        body = r.json()
-        assert body["success"] is False
-        err = body.get("error", "")
-        assert ("BlueprintPythonBridge" in err) or ("UMG API" in err), err
+        """桥缺 UMG API → 必须可读 fail-loud（不假成功）。
+
+        v3.3.1 起 fake 替身已补 UMG API（材质/控件族回读改为离线可测），故此处
+        **显式摘除**那 5 个方法以复现「老 DLL」条件，不再依赖替身恰好缺失。
+        """
+        bridge_cls = ue5_bridge.bridge
+        umg_api = ("create_widget_blueprint", "add_widget_to_tree",
+                   "set_widget_property", "read_widget_tree",
+                   "read_widget_property")
+        saved = {}
+        for _n in umg_api:
+            if hasattr(bridge_cls, _n):
+                saved[_n] = getattr(bridge_cls, _n)
+                delattr(bridge_cls, _n)
+        try:
+            r = client.post("/command", json={
+                "command": "widget_read_tree",
+                "params": {"widget_path": "/Game/X/WBP_X"}}, headers=TOKEN)
+            body = r.json()
+            assert body["success"] is False
+            err = body.get("error", "")
+            assert ("BlueprintPythonBridge" in err) or ("UMG API" in err), err
+        finally:
+            for _n, _v in saved.items():
+                setattr(bridge_cls, _n, _v)
 
     def test_material_read_fail_loud_in_fake_env(self):
         r = client.post("/command", json={

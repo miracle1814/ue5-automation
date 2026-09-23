@@ -146,7 +146,7 @@ Every write is **read back and compared**; mismatches raise loud errors. We cons
 |:--|:--|
 | [START-HERE (中文快速开始)](START-HERE.zh-CN.md) | 部署 / 接入 / SOP / 能力 / 排障 |
 | [README.zh-CN.md](README.zh-CN.md) | 中文说明与部署指南 |
-| [skill/ue5-automation/SKILL.md](skill/ue5-automation/SKILL.md) | full manual (v0.19) |
+| [skill/ue5-automation/SKILL.md](skill/ue5-automation/SKILL.md) | full manual (v0.20) |
 | [MCP-ACCESS.md](skill/ue5-automation/docs/MCP-ACCESS.md) | connecting MCP clients to UE 5.1–5.5 |
 | [skill/ue5-automation/docs/pitfalls.md](skill/ue5-automation/docs/pitfalls.md) | 19 known pitfalls (and fixes) |
 | [bridge/BlueprintPythonBridge/Source/BUILD.md](bridge/BlueprintPythonBridge/Source/BUILD.md) | compiling the bridge for 5.2–5.8 |

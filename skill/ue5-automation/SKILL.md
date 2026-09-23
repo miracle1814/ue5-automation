@@ -1,14 +1,14 @@
 # UE5.1 自动化工具 — 使用手册
 
 > **Skill 名称：** `ue5-automation`  
-> **版本：** v0.19（T-20260922-V33-MCP-TOOL-CATALOG · MCP 工具目录规范化：23 工具统一 verb_noun 命名 + 英文主描述（Use-when/返回形态）+ 参数级 schema 说明；v0.18 为 5.8 桥编译实证）
-> **历史版本记录：** v0.18（T-20260918-V32-UE58 · 5.8 桥编译实证 + extras 端到端验收；v0.17 为回读补强）
+> **版本：** v0.20（T-20260923-V331-MAT-READBACK · 材质族回读验证补齐 + MCP `isError` 契约加固：`material_add_expression` / `material_connect_expressions` / `material_connect_property` 补回读比对（P04 教训平移，含隐式转换节点检测）；`widget_add_child` 补 `read_widget_tree` 回读；`material_compile` 修 `is False` 漏 `None`；`compile_blueprint` 补 `success` 键（原只报 `compiled:false` → 编译失败以 `isError:false` 抵达客户端）；MCP 层 `is_err` 同时认 `success` 与 `ok`；材质/控件族补离线替身（此前零用例））
+> **历史版本记录：** v0.19（T-20260922-V33-MCP-TOOL-CATALOG · MCP 工具目录规范化：23 工具统一 verb_noun 命名 + 英文主描述（Use-when/返回形态）+ 参数级 schema 说明；v0.18 为 5.8 桥编译实证）
 > **历史版本记录：** v0.17（T-20260918-V301-READBACK · 回读置信度补强：UMG/材质设值回读比对 + FSlateColor 自适应；v0.16 为融合升级）
 > **历史版本记录：** v0.16（T-20260918-V3-FUSION · 融合升级：MCP 协议接入 + PIE 验证族 + 材质/UMG 新域 + 源码随包；v0.15 为独立验证轮）
 > **历史版本记录：** v0.15（T-20260918-VERIFY-FIX · 独立验证轮：缺陷族 E-1~E-10 修复 + 全库口径清理，见下方 v0.15 日志；v0.14 历史内容保留其后）
 > **历史版本记录：** v0.14（T-20260917-SKILL-CLEANUP-V219 · 蓝图缺陷 **D-5~D-8** 修复 + 文档/元数据口径清理：`/build` 的 `events[]` / `functions[]` **字段名契约对齐**（照文档写不再得空名）· `add_function_node` **回传 node GUID** · `delete_asset` **保存作用域收窄**（不再静默提交未保存关卡））  
 > **手册版本：** v2.3  
-> **更新日期：** 2026-09-22（v0.19）  
+> **更新日期：** 2026-09-23（v0.20）  
 > **适用 UE 版本：** **5.1.x 开箱即用**；5.2–5.5 需自行重编译 bridge；5.6+ 未验证 —— **升级路径与出口见 [`UE_VERSION_GUIDE.md`](UE_VERSION_GUIDE.md)**（随包）
 >
 > **📦 随包范围（第三方使用者必读）：** 发布包只含**运行时脚本**（`scripts/` / `templates/` / 文档）。`tests/`、`conftest.py`、`run_tests.bat` 属**开发端测试基建**，**默认不随发布包**（仅 `publish.py --with-tests` 时携带）——下文历史更新日志中出现的 `run_tests.bat` 命令均为**开发端**用法，第三方发布包内**无此文件**，请勿尝试执行。
@@ -43,7 +43,7 @@
 >   - **日志查询**：`logs_read`（游标增量 + category/pattern 过滤）—— 诊断模式从"用户贴日志"升级为"Agent 自取日志"。
 >   - **批量执行**：`editor_batch`（白名单命令序列单次请求，fail-loud 可中止）。
 > - 🔴 **实测修复：PIE 传送假成功**（"返回值说谎"族）：`set_actor_location(vec, False, False)` 在 PIE 中对 Static 组件**静默无效**但命令报 success=true → 改为 teleport=True 优先 + **设置后回读比对，未生效即 fail-loud**（并回传 mobility 供排查）。实测：Movable Actor 传送 verified=true + 独立复读一致。
-> - 🎨 **材质族（9 条命令 · 1 个新 C++ API）**：探针实测 UE5.1 `MaterialEditingLibrary` 完整暴露（72 方法）→ `material_create` / `material_add_expression` / `material_connect_expressions` / `material_connect_property`（base_color 等 14 种属性映射）/ `material_set_expression_property`（类型自适应 + 回读回传）/ `material_compile` / `material_read` / `material_instance_create` / `material_instance_set_parameter`（scalar/vector/texture）。
+> - 🎨 **材质族（9 条命令 · 1 个新 C++ API）**：探针实测 UE5.1 `MaterialEditingLibrary` 完整暴露（72 方法）→ `material_create` / `material_add_expression`（**v0.20：回读确认表达式落图**）/ `material_connect_expressions`（**v0.20：回读目标引脚实际连到的表达式并比对，另检测引擎插入的隐式转换节点**）/ `material_connect_property`（**v0.20：回读主属性实际连到的表达式**，base_color 等 14 种属性映射）/ `material_set_expression_property`（类型自适应 + 回读回传）/ `material_compile`（**v0.20：`None` 不再漏判**）/ `material_read` / `material_instance_create` / `material_instance_set_parameter`（scalar/vector/texture）。三条连线/建表达式命令的返回体带 `verified` / `warnings`——`verified` **只表示"回读比对执行且通过"**，不因非致命告警（如隐式转换节点）变 false；比对读不到时 `verified=false` + 告警，命令不阻断。
 > - 🧩 **UMG 控件蓝图（4 条命令 + 4 个新 C++ API）**：`UWidgetTree` 未向 Python 暴露（与 UEdGraph 同坑）→ C++ 桥新增 `CreateWidgetBlueprint`（父类 UUserWidget + 自动建树编译）/ `AddWidgetToTree`（根或面板子级，重名 fail-loud）/ `SetWidgetProperty`（FindFProperty + ImportText_Direct）/ `ReadWidgetTree`；命令层 `widget_create` / `widget_add_child` / `widget_set_property` / `widget_read_tree`（旧 DLL 上调用 → 可读缺件提示 + 重编译指引，绝不假成功）。WidgetBlueprint 的 EventGraph 复用既有节点级图能力。
 > - 📦 **白名单 50 → 72 条**（+PIE×3 + Actor×4 + logs + batch + 材质×9 + UMG×4）；`/command` docstring 同步。
 > - 🔧 **C++ 桥源码随包**：`bridge/BlueprintPythonBridge/Source/`（.cpp/.h/Build.cs 全量）+ `build_for_engine.bat <UE_ROOT>` 一键编译（自动备份旧 DLL + 部署）+ `BUILD.md`（5.2–5.8 自助重编译路径；含 Win32Exception 998 / VS 工具链 / API 变动三类问题的处理）→ UE_VERSION_GUIDE 路径 B 对第三方**真正可自助**。

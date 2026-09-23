@@ -1428,7 +1428,10 @@ def _cmd_compile_blueprint(bp_path: str) -> dict:
     except Exception:
         pass  # 日志读取失败不影响主流程
 
-    result = {"compiled": bool(compile_ok)}
+    # ⚠️ `success` 键必须存在：MCP 层判据是 `result.get("success") is False`
+    #   （见 `_mcp_handle_one`）——只报 `compiled:false` 会让编译失败以
+    #   `isError:false` 返回客户端，agent 据 isError 判定时会当成成功。
+    result = {"success": bool(compile_ok), "compiled": bool(compile_ok)}
     # D-2（T-20260913-UE5BRIDGE-DELETE-COMPILE-FIX）：编译后**强制回读**
     result["compile_status"] = _bp_status_str(
         bp, compiled=bool(compile_ok))
@@ -5483,6 +5486,77 @@ def _mat_find_expression(mat, name: str):
                       category="material")
 
 
+# ══════════════════════════════════════════════════════════
+#  材质写操作回读（v3.3.1）
+#  动机：蓝图侧已证实「引擎 API 的 bool 返回值会说谎」（P01/P04：ConnectPins
+#  是可行性验证 API，类型不匹配时建隐式 Cast 节点仍返回 True）。材质侧
+#  connect_material_expressions / connect_material_property 是同类 API，
+#  原先只判返回值 → 同一类假阳性没有防护。
+#  降级口径对齐 `_pywrap_readback_nodes` 的 R1 策略：**能读到就严格比对，
+#  读不到只记 warning 不阻断**（避免非 GameThread 等场景制造假阴性）。
+# ══════════════════════════════════════════════════════════
+
+def _mat_expression_names(mat):
+    """表达式名集合（快照/回读用）。失败返回 None = 回读通道不可用。"""
+    try:
+        return {str(e.get_name()) for e in _mat_expressions(mat)}
+    except Exception:
+        return None
+
+
+def _mat_prop_attr(property_name: str):
+    """友好属性名 → UMaterial 上的 UPROPERTY 名（MP_BASE_COLOR → base_color）。"""
+    key = _MAT_PROP_MAP.get(str(property_name or "").strip().lower())
+    if not key:
+        return None
+    return key[3:].lower() if key.startswith("MP_") else None
+
+
+def _mat_linked_expr_name(container, input_name: str, label: str = ""):
+    """回读 container 上某输入的连接目标 → (expr_name|'', err)。
+
+    container 可为 UMaterialExpression（输入属性如 A/B/Coordinates）或
+    UMaterial（主属性如 base_color）。
+    err 非空 = 回读通道不可用（调用方记 warning）；err 为空且返回 '' = 确实未连线。
+    """
+    if not input_name:
+        return "", "输入名为空，无法定位回读目标"
+    try:
+        pin = container.get_editor_property(input_name)
+    except Exception as e:
+        return "", "输入 %r 不可读: %s" % (input_name, e)
+    linked = getattr(pin, "expression", None)
+    if linked is None:
+        # 部分版本用 get_expression() 取
+        getter = getattr(pin, "get_expression", None)
+        if callable(getter):
+            try:
+                linked = getter()
+            except Exception:
+                linked = None
+    if linked is None:
+        return "", ""
+    try:
+        return str(linked.get_name()), ""
+    except Exception as e:
+        return "", "连接目标不可读: %s" % e
+
+
+def _mat_first_input_name(mat, expr):
+    """取表达式第一个输入名（connect_* 的「空串 = 默认第一引脚」口径）。"""
+    mel = _mat_me()
+    fn = getattr(mel, "get_inputs_for_material_expression", None)
+    if not callable(fn):
+        return None, "get_inputs_for_material_expression 不可用"
+    try:
+        names = [str(x) for x in (fn(mat, expr) or [])]
+    except Exception as e:
+        return None, "输入名枚举失败: %s" % e
+    if not names:
+        return None, "该表达式无输入引脚"
+    return names[0], ""
+
+
 def _cmd_material_create(material_path: str, package_path: str = "") -> dict:
     """创建材质资产（UMaterial + MaterialFactoryNew）。"""
     _pywrap_require_str("material_path", material_path)
@@ -5534,11 +5608,24 @@ def _cmd_material_add_expression(material_path: str, expression_class: str,
                 "表达式类不可解析: %s（示例 /Script/Engine.MaterialExpressionScalarParameter）"
                 % cls_raw, category="material")
         mel = _mat_me()
+        before = _mat_expression_names(mat)
         expr = mel.create_material_expression(mat, cls, int(pos[0]), int(pos[1]))
         if expr is None:
             raise BridgeError("create_material_expression 返回 None（表达式未创建）",
                               category="material")
-        return {"name": str(expr.get_name()), "class": str(cls.get_path_name())}
+        name = str(expr.get_name())
+        # ── 回读：确认表达式真的落进了材质（不能只信返回对象非 None）──
+        warnings = []
+        after = _mat_expression_names(mat)
+        if before is None or after is None:
+            warnings.append(
+                "表达式回读不可用（_mat_expressions 失败）→ 未能确认 %s 已落图" % name)
+        elif name not in after:
+            raise BridgeError(
+                "表达式回读不一致：%s 未出现在材质表达式列表中（API 返回了对象但未落图）"
+                % name, category="material")
+        return {"name": name, "class": str(cls.get_path_name()),
+                "warnings": warnings}
 
     out = _run_on_game_thread_sync(_do, timeout=30.0)
     return {"success": True, "ok": True, "data": out}
@@ -5556,6 +5643,7 @@ def _cmd_material_connect_expressions(material_path: str, from_name: str,
         mel = _mat_me()
         src = _mat_find_expression(mat, from_name)
         dst = _mat_find_expression(mat, to_name)
+        before = _mat_expression_names(mat)
         ok = mel.connect_material_expressions(
             src, str(from_output or ""), dst, str(to_input or ""))
         if not ok:
@@ -5564,7 +5652,44 @@ def _cmd_material_connect_expressions(material_path: str, from_name: str,
                 "检查引脚名（空串=默认第一引脚）与类型兼容性"
                 % (from_name, from_output or "<default>", to_name, to_input or "<default>"),
                 category="material")
-        return {"connected": True, "from": from_name, "to": to_name}
+        # ── 回读比对（P04 教训平移：材质侧同类 API 的 bool 同样会说谎）──
+        # verified 与 warnings 解耦：verified 只回答「回读比对是否真的执行且通过」，
+        #   不因非致命告警（如检测到隐式转换节点）而变 False —— 否则连线已验证通过
+        #   却报 verified=False，等于把两个概念混在一个字段里（本次审计自查修正）。
+        warnings = []
+        verified = False
+        # ① 隐式转换节点检测：类型不匹配时引擎会插入转换表达式 —— 蓝图侧
+        #    `TryCreateConnection` 正是这样"返回 True 但原 Pin 无 LinkedTo"。
+        #    注意：本项只是线索上报，**不影响 verified**（连线本身由 ② 判定）。
+        after = _mat_expression_names(mat)
+        if before is not None and after is not None:
+            added = sorted(after - before)
+            if added:
+                warnings.append(
+                    "连线后新增 %d 个表达式（可能是引擎插入的隐式类型转换节点）: %s"
+                    % (len(added), added))
+        # ② 输入引脚连接目标比对
+        input_name = str(to_input or "")
+        if not input_name:
+            input_name, in_err = _mat_first_input_name(mat, dst)
+            if in_err:
+                warnings.append("输入名不可解析（%s）→ 未做连接回读比对" % in_err)
+                input_name = ""
+        if input_name:
+            linked, rb_err = _mat_linked_expr_name(
+                dst, input_name, label="%s.%s" % (to_name, input_name))
+            if rb_err:
+                warnings.append("连线回读不可用（%s）→ 未做比对" % rb_err)
+            elif linked != from_name:
+                raise BridgeError(
+                    "连线回读不一致：%s.%s 实际连到 %r，期望 %r"
+                    "（API 返回 True 但未生效）"
+                    % (to_name, input_name, linked or "<未连线>", from_name),
+                    category="material")
+            else:
+                verified = True
+        return {"connected": True, "from": from_name, "to": to_name,
+                "verified": verified, "warnings": warnings}
 
     out = _run_on_game_thread_sync(_do, timeout=30.0)
     return {"success": True, "ok": True, "data": out}
@@ -5585,7 +5710,29 @@ def _cmd_material_connect_property(material_path: str, from_name: str,
         if not ok:
             raise BridgeError("connect_material_property 返回 False（%s → %s）"
                               % (from_name, property_name), category="material")
-        return {"connected": True, "from": from_name, "property": property_name}
+        # ── 回读比对：材质主属性当前连到的表达式 ──
+        # verified 与 warnings 解耦（同 connect_expressions 口径）。
+        warnings = []
+        verified = False
+        attr = _mat_prop_attr(property_name)
+        if not attr:
+            warnings.append("属性名 %r 无法映射到 UPROPERTY → 未做连接回读比对"
+                            % property_name)
+        else:
+            linked, rb_err = _mat_linked_expr_name(
+                mat, attr, label="material.%s" % attr)
+            if rb_err:
+                warnings.append("连线回读不可用（%s）→ 未做比对" % rb_err)
+            elif linked != from_name:
+                raise BridgeError(
+                    "连线回读不一致：材质属性 %s 实际连到 %r，期望 %r"
+                    "（API 返回 True 但未生效）"
+                    % (property_name, linked or "<未连线>", from_name),
+                    category="material")
+            else:
+                verified = True
+        return {"connected": True, "from": from_name, "property": property_name,
+                "verified": verified, "warnings": warnings}
 
     out = _run_on_game_thread_sync(_do, timeout=30.0)
     return {"success": True, "ok": True, "data": out}
@@ -5672,9 +5819,13 @@ def _cmd_material_compile(material_path: str) -> dict:
         mat = _mat_load(material_path)
         mel = _mat_me()
         ok = mel.recompile_material(mat)
-        if ok is False:
-            raise BridgeError("recompile_material 返回 False（材质编译失败——检查连接/表达式）",
-                              category="material")
+        # 口径与全项目 fail-loud 一致用 `not ok`：`is False` 会放过 None
+        #   （引擎 API 失败路径返回 None 是常态）→ 会把未编译报成 compiled:True。
+        if not ok:
+            raise BridgeError(
+                "recompile_material 未返回 True（实收 %r）——材质编译失败，检查连接/表达式"
+                % (ok,),
+                category="material")
         expr_count = None
         try:
             expr_count = len(_mat_expressions(mat))
@@ -5850,8 +6001,32 @@ def _cmd_widget_add_child(widget_path: str, widget_class: str,
                               category="widget")
         if isinstance(err, str) and err:
             raise BridgeError("add_widget_to_tree 失败: %s" % err, category="widget")
+        # ── 回读比对：确认控件真的进了树（同族 widget_set_property 已有
+        #    ReadWidgetProperty 回读，此处原先缺失 → 族内验证密度不一致）──
+        # verified 与 warnings 解耦（同材质族口径）。
+        warnings = []
+        verified = False
+        try:
+            infos = b.read_widget_tree(wp) or []
+        except Exception as e:
+            infos = None
+            warnings.append("控件树回读不可用（read_widget_tree 异常: %s）→ 未做比对" % e)
+        if infos is not None:
+            names = set()
+            for i in infos:
+                for k in ("widget_name", "WidgetName"):
+                    v = getattr(i, k, None)
+                    if v is not None:
+                        names.add(str(v))
+                        break
+            if str(widget_name) not in names:
+                raise BridgeError(
+                    "控件树回读不一致：%s 未出现在控件树中（API 报成功但未落树）"
+                    % widget_name, category="widget")
+            verified = True
         return {"widget": full, "name": str(widget_name),
-                "class": str(widget_class), "parent": str(parent_name or "<root>")}
+                "class": str(widget_class), "parent": str(parent_name or "<root>"),
+                "verified": verified, "warnings": warnings}
 
     out = _run_on_game_thread_sync(_do, timeout=30.0)
     return {"success": True, "ok": True, "data": out}
@@ -9509,8 +9684,14 @@ def _mcp_handle_one(payload: Dict):
             return _mcp_err(_id, -32602, "Unknown tool: %s" % name), 200
         try:
             result = _gt_run_handler(impl, args)
+            # 同时认 `success` 与 `ok` 两种成功键：蓝图节点/变量/组件族（36 条写
+            #   命令）的返回体只有 `ok`（`_pywrap_ctor_result` / `_pywrap_node_result`），
+            #   原先只判 `success` → 这些命令一旦改成"返回 ok:False 而非 raise"，
+            #   就会以 `isError:false` 静默假成功。当前它们靠 raise 兜住，此处把
+            #   隐式契约显式化。
             is_err = (isinstance(result, dict)
-                      and result.get("success") is False)
+                      and (result.get("success") is False
+                           or result.get("ok") is False))
             return {"jsonrpc": "2.0", "id": _id,
                     "result": {"content": [{"type": "text",
                                             "text": _safe_json(result)}],
