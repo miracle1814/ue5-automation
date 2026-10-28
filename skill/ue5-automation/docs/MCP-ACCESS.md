@@ -1,0 +1,167 @@
+# MCP 接入指南（5.1–5.5 编辑器直连 · v3.0）
+
+> **一句话**：`ue5_bridge` 自 v3.0 起在 `/mcp` 端点提供 **MCP 协议（JSON-RPC 2.0 / Streamable HTTP）** ——
+> 任何 MCP 客户端（ZCode / Claude Desktop / Cursor / 自研）都能像连官方 UE 5.8 MCP 那样，
+> 直接驱动 **UE 5.1–5.5** 编辑器做蓝图读写、PIE 验证、日志查询与批量操作。
+>
+> 官方 `ModelContextProtocol` 插件只随 UE 5.8 提供；本端点是**同一协议的自建实现**，
+> 零额外依赖（UE5.1 内嵌 Python 3.9 装不了官方 mcp SDK，故手写 ~300 行）。
+
+---
+
+## 一、前置条件
+
+1. UE 编辑器已打开目标项目（5.1–5.5），且已按 DEPLOY.md 完成部署（Bridge DLL + 远程执行）；
+2. Bridge HTTP 服务在线（`python scripts\ue5_runner.py health` 通过；未启动时 runner 会自动远程拉起）；
+3. 取 token：`%APPDATA%\ue5_bridge\token` 文件内容（bridge 首次启动自动生成）。
+
+```cmd
+:: 快速取 token（cmd）
+type %APPDATA%\ue5_bridge\token
+```
+
+## 二、客户端配置
+
+### ZCode（`%USERPROFILE%\.zcode\cli\config.json`）
+
+在顶层 `mcp.servers` 下加一项（与官方 `unreal`（8000 端口）**并存**，互不冲突）：
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "unreal":       { "type": "http", "url": "http://127.0.0.1:8000/mcp", "timeoutMs": 60000 },
+      "ue5-automation": {
+        "type": "http",
+        "url": "http://127.0.0.1:8889/mcp",
+        "timeoutMs": 60000,
+        "headers": { "X-Skill-Token": "<token 文件内容>" }
+      }
+    }
+  }
+}
+```
+
+> 若你的客户端版本不支持自定义 headers：改用 URL 查询参数
+> `"url": "http://127.0.0.1:8889/mcp?token=<token>"`（⚠️ token 会进 URL，仅限本机回环）。
+
+### Claude Desktop / 其他 `mcpServers` 风格
+
+```json
+{
+  "mcpServers": {
+    "ue5-automation": {
+      "type": "http",
+      "url": "http://127.0.0.1:8889/mcp",
+      "headers": { "X-Skill-Token": "<token>" }
+    }
+  }
+}
+```
+
+### stdio 客户端（Claude Desktop 等不支持自定义 HTTP 头的客户端）
+
+随包 stdio 代理 `scripts/ue5_mcp_stdio.py`：本地应答 `initialize` / `tools/list` /
+`ping`（无需 UE 在线，工具目录与 /mcp 单一来源同步），`tools/call` 转发到编辑器内
+桥（默认 `http://127.0.0.1:8889/mcp`，可用 `UE5_BRIDGE_URL` 覆盖）。token 取
+`UE5_BRIDGE_TOKEN` 环境变量或 `%APPDATA%\ue5_bridge\token`（与桥同口径），UE 离线
+时调用返回可读错误、绝不假成功。
+
+```json
+{
+  "mcpServers": {
+    "ue5-automation": {
+      "command": "python",
+      "args": ["<仓库>/skill/ue5-automation/scripts/ue5_mcp_stdio.py"]
+    }
+  }
+}
+```
+
+日志走 stderr；stdout 只承载 JSON-RPC 协议流。离线自检：
+`echo {"jsonrpc":"2.0","id":1,"method":"tools/list"} | python ue5_mcp_stdio.py`。
+
+## 三、协议与冒烟测试
+
+**支持**：`initialize`（协议版本协商 2025-06-18 / 2025-03-26 / 2024-11-05）、
+`notifications/*`（202 空体）、`ping`、`tools/list`、`tools/call`、`resources/list`、`prompts/list`。
+响应为单 JSON（Streamable HTTP 允许）；`initialize` 返回 `Mcp-Session-Id` 头（无状态兼容，可不回传）。
+
+```bash
+:: curl 冒烟（Windows cmd 用 ^ 换行；bash 用 \）
+curl -s -X POST http://127.0.0.1:8889/mcp ^
+  -H "Content-Type: application/json" ^
+  -H "X-Skill-Token: <token>" ^
+  -d "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}"
+```
+
+```python
+# python 冒烟（任意 3.8+ 环境）
+import json, urllib.request
+TOKEN = open(r"%APPDATA%\ue5_bridge\token").read().strip()  # 注意展开
+def rpc(method, params=None, _id=1):
+    body = {"jsonrpc": "2.0", "id": _id, "method": method}
+    if params: body["params"] = params
+    req = urllib.request.Request("http://127.0.0.1:8889/mcp",
+        data=json.dumps(body).encode(),
+        headers={"Content-Type": "application/json", "X-Skill-Token": TOKEN})
+    return json.loads(urllib.request.urlopen(req, timeout=60).read())
+print([t["name"] for t in rpc("tools/list")["result"]["tools"]])
+```
+
+## 四、工具清单（27 个）
+
+| 分组 | 工具 |
+|:--|:--|
+| 诊断 | `ue5_check_health` · `ue5_run_diagnostics` |
+| 只读 | `ue5_list_assets` · `ue5_read_blueprint` · `ue5_read_nodes` · `ue5_read_connections` · `ue5_search_blueprint_nodes`（查函数/事件/流程控制候选 + 引脚签名，写图前先调） |
+| 蓝图写 | `ue5_build_blueprint` · `ue5_build_batch` · `ue5_compile_blueprint` · `ue5_compile_and_diagnose` · `ue5_apply_blueprint_graph`（整图声明式写入 · 主路径）· `ue5_connect_pins` · `ue5_disconnect_pin` · `ue5_delete_node` |
+| 资产 | `ue5_save_asset` · `ue5_delete_asset` |
+| PIE 验证 | `ue5_start_pie` · `ue5_stop_pie` · `ue5_read_pie_state` · `ue5_list_pie_actors` · `ue5_read_pie_property` · `ue5_set_pie_transform` |
+| 视觉（v3.7，需 v3.7 DLL） | `ue5_screenshot`（截图反馈闭环：editor_viewport / agent_camera / pie 三源；返回 base64 JPEG + camera_used 溯源 + actor 标注〔Pillow 可选〕；落盘 <项目>/Saved/Screenshots/ue5-automation/） |
+| 日志/批量 | `ue5_read_logs` · `ue5_run_batch` |
+| 材质（v3.0） | `ue5_execute_command` 内：`material_create` / `material_add_expression` / `material_connect_expressions` / `material_connect_property` / `material_set_expression_property` / `material_compile` / `material_read` / `material_instance_create` / `material_instance_set_parameter` |
+| UMG（v3.0，需 v3.0 DLL） | `ue5_execute_command` 内：`widget_create` / `widget_add_child` / `widget_set_property` / `widget_read_tree` |
+| 透传 | `ue5_execute_command`（**84 条**白名单命令全量入口；描述中列全命令名；含截图三命令与任务上报五命令） |
+
+**为何不平铺 84 条命令**：`tools/list` 体积直接吃客户端 token 预算（官方 MCP 的
+`describe_toolset` 就因超预算被截断）。这里 27 个高频工具 + 1 个透传入口，
+覆盖全量能力的同时保持清单精简。
+
+## 五、典型工作流（PIE 运行时验证）
+
+```
+ue5_build_blueprint(spec)                 # 建蓝图（事件+函数节点+连线+编译）
+ue5_start_pie(mode="simulate")            # 启动 Simulate
+ue5_read_pie_state()                           # 轮询 is_playing == true
+ue5_list_pie_actors(name_filter="BP_MyActor")  # 找运行时对象（路径含 UEDPIE_0_）
+ue5_read_pie_property(actor, "Health")     # 读运行时变量 → 证明逻辑真的跑了
+ue5_set_pie_transform(actor, location=[...])  # 传送后复读，验证响应
+ue5_read_logs(pattern="BP_MyActor")            # 自取日志交叉验证
+ue5_stop_pie()
+```
+
+## 五·补、视觉自检闭环（v3.7）
+
+```
+ue5_apply_blueprint_graph(spec)     # 改场景/改蓝图
+ue5_screenshot(source="editor_viewport")        # 看一眼编辑器画面
+ue5_screenshot(source="agent_camera",
+               camera={"pitch":-30,"yaw":45,"roll":0})   # 确定性机位多角度
+ue5_start_pie() → ue5_screenshot(source="pie")  # 看一眼运行画面
+# 图进上下文（base64 JPEG，长边 768），原图落盘
+# <项目>/Saved/Screenshots/ue5-automation/（仪表盘画面面板同源）
+# 注意：截图命令需要 v3.7 版桥 DLL（旧 DLL 会得到明确的重新编译提示）
+```
+
+## 六、安全边界（与 REST 端点同级）
+
+- `/mcp` 与其余 9 个端点**同一 token 鉴权**（X-Skill-Token / Bearer / ?token= 三通道）；
+- 仅监听 `127.0.0.1:8889`，不对外暴露；
+- `tools/call` 只路由到**白名单实现**（27 工具 + 78 命令），无任意代码执行入口；
+- 通知类消息不消耗任何 UE 操作；所有 UE 对象访问仍走 GameThread 队列。
+
+> 观测面（T-20261024-UE5BRIDGE-DASHBOARD）：浏览器打开
+> `http://127.0.0.1:8889/ui?token=<token>` 可**只读**查看 agent 工作过程
+> （任务流水 / 图纸视图 / 验证墙 / 报告导出）；`/ui*` 全部 GET、同一 token、
+> 事件留痕 `%APPDATA%\ue5_bridge\sessions\`（JSONL），不新增任何 MCP 工具。

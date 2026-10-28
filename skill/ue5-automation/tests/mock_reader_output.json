@@ -1,0 +1,149 @@
+[
+  {
+    "basic_info": {
+      "name": "BP_TestPhase2",
+      "asset_path": "/Game/DemoTest/BP_TestPhase2",
+      "parent_class": "Actor",
+      "blueprint_type": "Blueprint",
+      "interfaces": []
+    },
+    "graphs": {
+      "EventGraph": {
+        "graph_name": "EventGraph",
+        "nodes": [
+          {"node_name": "BeginPlay", "node_type": "K2Node_Event", "category": "event"},
+          {"node_name": "PrintHello", "node_type": "K2Node_CallFunction", "category": "function_call", "target_class": "KismetSystemLibrary"},
+          {"node_name": "Branch", "node_type": "K2Node_IfThenElse", "category": "flow_control"}
+        ],
+        "connections": [
+          {"from": "BeginPlay", "to": "PrintHello"},
+          {"from": "PrintHello", "to": "Branch"}
+        ]
+      }
+    },
+    "related_blueprints": [],
+    "variables": [{"name": "Health", "type": "int"}],
+    "referenced_assets": []
+  },
+  {
+    "basic_info": {
+      "name": "BP_TestPhase3",
+      "asset_path": "/Game/DemoTest/BP_TestPhase3",
+      "parent_class": "BP_TestPhase2",
+      "blueprint_type": "Blueprint",
+      "interfaces": []
+    },
+    "graphs": {
+      "EventGraph": {
+        "graph_name": "EventGraph",
+        "nodes": [
+          {"node_name": "Tick", "node_type": "K2Node_Event", "category": "event"},
+          {"node_name": "SetActorLocation", "node_type": "K2Node_CallFunction", "category": "function_call"}
+        ],
+        "connections": [
+          {"from": "Tick", "to": "SetActorLocation"}
+        ]
+      },
+      "MoveToTarget": {
+        "graph_name": "MoveToTarget",
+        "nodes": [
+          {"node_name": "Entry", "node_type": "K2Node_FunctionEntry", "category": "function"},
+          {"node_name": "MoveComponentTo", "node_type": "K2Node_CallFunction", "category": "function_call"},
+          {"node_name": "CastToActor", "node_type": "K2Node_DynamicCast", "category": "cast", "target_class": "BP_TestPhase2"}
+        ],
+        "connections": [
+          {"from": "Entry", "to": "CastToActor"},
+          {"from": "CastToActor", "to": "MoveComponentTo"}
+        ]
+      }
+    },
+    "related_blueprints": ["/Game/DemoTest/BP_TestPhase2"],
+    "variables": [],
+    "referenced_assets": []
+  },
+  {
+    "basic_info": {
+      "name": "BP_CharA",
+      "asset_path": "/Game/Characters/BP_CharA",
+      "parent_class": "Character",
+      "blueprint_type": "Blueprint",
+      "interfaces": []
+    },
+    "graphs": {
+      "EventGraph": {
+        "graph_name": "EventGraph",
+        "nodes": [
+          {"node_name": "BeginPlay", "node_type": "K2Node_Event", "category": "event"},
+          {"node_name": "SpawnActor", "node_type": "K2Node_CallFunction", "category": "function_call", "target_class": "BP_CharB_C"}
+        ],
+        "connections": [
+          {"from": "BeginPlay", "to": "SpawnActor"}
+        ]
+      }
+    },
+    "related_blueprints": ["/Game/Characters/BP_CharB"],
+    "variables": [],
+    "referenced_assets": []
+  },
+  {
+    "basic_info": {
+      "name": "BP_CharB",
+      "asset_path": "/Game/Characters/BP_CharB",
+      "parent_class": "Character",
+      "blueprint_type": "Blueprint",
+      "interfaces": []
+    },
+    "graphs": {
+      "EventGraph": {
+        "graph_name": "EventGraph",
+        "nodes": [
+          {"node_name": "BeginPlay", "node_type": "K2Node_Event", "category": "event"},
+          {"node_name": "GetActor", "node_type": "K2Node_CallFunction", "category": "function_call", "target_class": "BP_CharC_C"}
+        ],
+        "connections": [
+          {"from": "BeginPlay", "to": "GetActor"}
+        ]
+      }
+    },
+    "related_blueprints": ["/Game/Characters/BP_CharC"],
+    "variables": [],
+    "referenced_assets": []
+  },
+  {
+    "basic_info": {
+      "name": "BP_CharC",
+      "asset_path": "/Game/Characters/BP_CharC",
+      "parent_class": "Character",
+      "blueprint_type": "Blueprint",
+      "interfaces": []
+    },
+    "graphs": {
+      "EventGraph": {
+        "graph_name": "EventGraph",
+        "nodes": [
+          {"node_name": "BeginPlay", "node_type": "K2Node_Event", "category": "event"},
+          {"node_name": "Cast", "node_type": "K2Node_DynamicCast", "category": "cast", "target_class": "BP_CharA_C"}
+        ],
+        "connections": [
+          {"from": "BeginPlay", "to": "Cast"}
+        ]
+      }
+    },
+    "related_blueprints": ["/Game/Characters/BP_CharA"],
+    "variables": [],
+    "referenced_assets": []
+  },
+  {
+    "basic_info": {
+      "name": "BP_Empty",
+      "asset_path": "/Game/DemoTest/BP_Empty",
+      "parent_class": "Actor",
+      "blueprint_type": "Blueprint",
+      "interfaces": []
+    },
+    "graphs": {},
+    "related_blueprints": [],
+    "variables": [],
+    "referenced_assets": []
+  }
+]

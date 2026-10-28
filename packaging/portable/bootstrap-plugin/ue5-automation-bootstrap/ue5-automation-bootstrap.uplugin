@@ -1,0 +1,14 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "ue5-automation bootstrap",
+	"Description": "Starts the ue5-automation HTTP bridge (127.0.0.1:8889) from plugin init. UE 5.8+ no longer runs the project's own Content/Python/init_unreal.py, so the bootstrap lives in a plugin.",
+	"Category": "Scripting",
+	"CreatedBy": "ue5-automation",
+	"CanContainContent": true,
+	"IsBetaVersion": true,
+	"Installed": true,
+	"EnabledByDefault": true,
+	"Modules": []
+}

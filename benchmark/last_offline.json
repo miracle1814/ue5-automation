@@ -1,0 +1,14 @@
+{
+  "package_version": "v6.5.0",
+  "skill_version": "v1.14.0",
+  "passed": 820,
+  "failed": 0,
+  "skipped": 95,
+  "duration_s": 90.3,
+  "exit_code": 0,
+  "tail": [
+    "",
+    "-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html",
+    "820 passed, 95 skipped, 1 warning, 27 subtests passed in 89.34s (0:01:29)"
+  ]
+}

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Configuration xmlns="https://www.unrealengine.com/BuildConfiguration">
+    <VCProjectFileGenerator>
+        <Version>2019</Version>
+    </VCProjectFileGenerator>
+    <WindowsPlatform>
+        <CompilerVersion>14.29.30133</CompilerVersion>
+        <WindowsSdkVersion>10.0.22621.0</WindowsSdkVersion>
+    </WindowsPlatform>
+    <BuildConfiguration>
+        <bAllowXGE>false</bAllowXGE>
+        <bAllowUBTParallelExecutor>false</bAllowUBTParallelExecutor>
+    </BuildConfiguration>
+</Configuration>

@@ -1,0 +1,263 @@
+"""
+game_thread_connect.py.tmpl — GameThread 引脚连线脚本（模板）
+================================================================
+由 ue5_bridge.py 的 POST /connect 端点加载，
+通过 bridge.execute_python_on_game_thread() 注入 GameThread 执行。
+
+占位符：
+  {SPEC_FILE}  — JSON spec 文件路径（含 blueprint_path/connections）
+  {RESULT_FILE} — JSON 结果输出文件路径
+
+三重验证（来自 pitfalls.md P01+P02 修复）：
+  ① Bridge DLL ConnectPins
+  ② get_node_connections 拓扑验证
+  ③ 双向 LinkedTo 确认
+
+⚠️ 本脚本在 GameThread 上运行，使用 unreal.BlueprintPythonBridge.* 静态方法
+   （不可使用 bridge.* 包装函数，其内部 AsyncTask 会导致嵌套死锁）。
+
+N01 修复（2026-07-27）：从零创建模板文件。
+"""
+import unreal
+import json
+import traceback
+
+_spec_file = {SPEC_FILE}
+_result_file = {RESULT_FILE}
+
+
+def _ue5_gt_main():
+    """GT 主体（修法1 · T-20260914-UE5BRIDGE-BUILD-HOLD-FIX）。
+
+    模块级只保留 import / _spec_file / _result_file（字符串）；所有 UObject
+    绑定（bp / graph / node / src_node / dst_node ...）降为函数局部量，
+    随函数返回立即失去引用 → 包装器析构 → 不再被持久 PyConsoleGlobalDict
+    保活（保活会让 delete_asset 恒 False）。
+    """
+
+    result = {"success": True, "results": []}
+
+
+    def _same_pin(a, b):
+        """pin 对象相等判断（兼容真实 UE 对象按底层比较与 fake 身份比较）。"""
+        try:
+            return a is b or a == b
+        except Exception:
+            return False
+
+
+    def _pin_name_of(p):
+        """提取 pin 名（兼容真实 UE EdGraphPin 与 fake FakePin）。"""
+        try:
+            return str(p.pin_name)
+        except Exception:
+            try:
+                return str(p.get_name())
+            except Exception:
+                return ""
+
+
+
+    # ── T-20260912-UE5BRIDGE-TITLEGATE-FIX · 同名节点定位 GUID 闸门 ──────────────
+    # 规则与 ue5_bridge._pywrap_locate_node_strict 同源：GUID 优先 → 标题同名
+    # fail-loud（绝不静默连错线 / 绝不静默误判存在）。本模板在 GameThread 内运行，
+    # 只能使用 unreal.BlueprintPythonBridge.* 静态方法，故此处内联同语义实现。
+    def _norm_guid_ref(s):
+        """入参是否「形如 GUID」→ 归一化后的 32 位大写 hex（否则 ''）。"""
+        t = str(s or "")
+        for ch in ("{", "}", "-", " ", "\t"):
+            t = t.replace(ch, "")
+        t = t.strip().upper()
+        if len(t) == 32 and all(c in "0123456789ABCDEF" for c in t):
+            return t
+        return ""
+
+
+    def _locate_node_strict(graph, ref):
+        """GUID 优先 → 同名 fail-loud 定位节点 → (node|None, matched_by, matched_title, err)。
+
+        matched_title = 回读表里的**真实标题**（GUID 入参时由 list_nodes 反查）——
+        拓扑校验必须用它比对（K2Node 对象上取不到 node_title，拿 GUID 比对会假阴性）。
+        err 非空 = 调用方必须放弃该条连线（不得降级为「随便挑一个」）。
+        """
+        BPB = unreal.BlueprintPythonBridge
+        raw = str(ref or "").strip()
+        if not raw:
+            return None, "", "", "节点不存在: <空参数>（需给节点标题或 32 位 GUID）"
+
+        # 路径 A：GUID 精确（同名场景唯一可靠锚点）
+        guid = _norm_guid_ref(raw)
+        if guid:
+            n = None
+            try:
+                n = BPB.get_node_by_guid(graph, guid)
+            except Exception:
+                n = None
+            if n is None:
+                return None, "", "", "节点不存在（GUID 未命中）: " + raw
+            _t = ""
+            try:
+                for _i in (BPB.list_nodes(graph) or []):
+                    _gi = str(getattr(_i, "node_guid", "") or "").upper()
+                    for _ch in ("{", "}", "-", " "):
+                        _gi = _gi.replace(_ch, "")
+                    if _gi == guid:
+                        _t = str(getattr(_i, "node_title", "") or "")
+                        break
+            except Exception:
+                _t = ""
+            if not _t:
+                _t = str(getattr(n, "node_title", "") or "")
+            return n, "guid", _t, ""
+
+        # 路径 B：标题计数（同名 > 1 → fail-loud）
+        matches = None
+        try:
+            infos = BPB.list_nodes(graph) or []
+            matches = [i for i in infos
+                       if str(getattr(i, "node_title", "") or "") == raw]
+        except Exception:
+            matches = None
+        if matches is None:
+            # 回读通道不可用（list_nodes 异常）→ 退回唯一标题查找（不新增失败面）
+            n = BPB.find_node_by_title(graph, raw)
+            if n is None:
+                return None, "", "", "节点不存在: " + raw
+            return n, "title", raw, ""
+        if len(matches) == 0:
+            return None, "", "", "节点不存在: " + raw
+        if len(matches) > 1:
+            dups = [str(getattr(i, "node_guid", "") or "<GUID不可读>") for i in matches]
+            return None, "", "", (
+                "节点标题歧义，拒绝执行: 「%s」在图中命中 %d 个同名节点 → "
+                "按标题连线会连错目标且无法确定意图，请改用 GUID 精确指定。"
+                "同名节点清单: %s" % (raw, len(matches), dups))
+        info = matches[0]
+        _g = str(getattr(info, "node_guid", "") or "")
+        n = None
+        if _g:
+            try:
+                n = BPB.get_node_by_guid(graph, _g)
+            except Exception:
+                n = None
+        if n is None:
+            n = BPB.find_node_by_title(graph, raw)
+        if n is None:
+            return None, "", "", "节点不存在: " + raw
+        return n, "title", (str(getattr(info, "node_title", "") or "") or raw), ""
+
+
+    try:
+        with open(_spec_file, 'r', encoding='utf-8') as f:
+            spec = json.load(f)
+
+        bp_path = spec['blueprint_path']
+        bp = unreal.EditorAssetLibrary.load_asset(bp_path)
+        if not bp:
+            raise Exception('Failed to load blueprint: ' + bp_path)
+
+        graph = unreal.BlueprintPythonBridge.get_event_graph(bp)
+        if not graph:
+            raise Exception('Failed to get EventGraph for: ' + bp_path)
+
+        for i, conn in enumerate(spec.get('connections', [])):
+            src_node_name = conn.get('src_node', '')
+            src_pin_name = conn.get('src_pin', '')
+            dst_node_name = conn.get('dst_node', '')
+            dst_pin_name = conn.get('dst_pin', '')
+            conn_key = f"{src_node_name}.{src_pin_name} -> {dst_node_name}.{dst_pin_name}"
+
+            conn_result = {
+                "index": i,
+                "connection": conn,
+                "success": False,
+            }
+
+            try:
+                # 查找源节点（F-1：GUID 优先 → 同名 fail-loud，绝不静默连错线）
+                src_node, _src_by, _src_mt, _src_err = _locate_node_strict(graph, src_node_name)
+                if src_node is None:
+                    conn_result["error"] = _src_err or f"source node not found: {src_node_name}"
+                    result["results"].append(conn_result)
+                    result["success"] = False
+                    continue
+
+                # 查找目标节点（F-1：GUID 优先 → 同名 fail-loud，绝不静默连错线）
+                dst_node, _dst_by, _dst_mt, _dst_err = _locate_node_strict(graph, dst_node_name)
+                if dst_node is None:
+                    conn_result["error"] = _dst_err or f"dest node not found: {dst_node_name}"
+                    result["results"].append(conn_result)
+                    result["success"] = False
+                    continue
+                # 拓扑校验用**真实回读标题**（GUID 入参时拿 GUID 比对会假阴性）
+                _src_title = _src_mt or src_node_name
+                _dst_title = _dst_mt or dst_node_name
+
+                # ① ConnectPins
+                ok = unreal.BlueprintPythonBridge.connect_pins(src_node, src_pin_name, dst_node, dst_pin_name)
+
+                # ② get_node_connections 拓扑验证
+                verified = False
+                try:
+                    all_conns = unreal.BlueprintPythonBridge.get_node_connections(graph)
+                    if all_conns:
+                        for c in all_conns:
+                            if (str(c.from_node_title) == _src_title and
+                                str(c.from_pin_name) == src_pin_name and
+                                str(c.to_node_title) == _dst_title and
+                                str(c.to_pin_name) == dst_pin_name):
+                                verified = True
+                                break
+                except Exception as verify_e:
+                    conn_result["verify_error"] = str(verify_e)
+
+                # ③ 双向 LinkedTo 确认（T-20260805 Bug2：ConnectPins 后必须回真实结果）
+                linked_ok = False
+                linked_note = ""
+                try:
+                    src_pin_obj = src_node.find_pin(src_pin_name) if hasattr(src_node, "find_pin") else None
+                    dst_pin_obj = dst_node.find_pin(dst_pin_name) if hasattr(dst_node, "find_pin") else None
+                    if src_pin_obj is not None and dst_pin_obj is not None:
+                        a_links = list(getattr(src_pin_obj, "linked_to", None) or [])
+                        b_links = list(getattr(dst_pin_obj, "linked_to", None) or [])
+                        a_has_b = any(_same_pin(x, dst_pin_obj) for x in a_links)
+                        b_has_a = any(_same_pin(x, src_pin_obj) for x in b_links)
+                        linked_ok = a_has_b and b_has_a
+                        linked_note = f"src_links={len(a_links)} dst_links={len(b_links)}"
+                except Exception as linked_e:
+                    conn_result["linkedto_error"] = str(linked_e)
+
+                if verified and linked_ok:
+                    conn_result["success"] = True
+                    conn_result["status"] = "connected"
+                    conn_result["reason"] = "LinkedTo 双向确认 + 拓扑验证通过"
+                elif verified:
+                    conn_result["success"] = True
+                    conn_result["status"] = "connected"
+                    conn_result["reason"] = "拓扑验证通过（LinkedTo 未完全确认）"
+                else:
+                    conn_result["success"] = False
+                    conn_result["status"] = "disconnected"
+                    conn_result["reason"] = "connection not verified in topology" + (
+                        f" ({linked_note})" if linked_note else "")
+                    result["success"] = False
+
+                result["results"].append(conn_result)
+
+            except Exception as e:
+                conn_result["error"] = str(e)
+                conn_result["traceback"] = traceback.format_exc()[-500:]
+                result["results"].append(conn_result)
+                result["success"] = False
+
+    except Exception as e:
+        result['success'] = False
+        result['error'] = str(e)
+        result['traceback'] = traceback.format_exc()[-1000:]
+
+    with open(_result_file, 'w', encoding='utf-8') as f:
+        json.dump(result, f, ensure_ascii=False, default=str)
+
+
+
+_ue5_gt_main()

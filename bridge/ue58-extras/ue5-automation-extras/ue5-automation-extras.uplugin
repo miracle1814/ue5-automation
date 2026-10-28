@@ -1,0 +1,26 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "UE5 Automation Extras",
+	"Description": "Registers the UE5AutomationExtras toolset with the editor's MCP toolset registry. Brings ue5-automation v3.0 verification-grade capabilities into the official Unreal MCP: PIE state reads, log self-service, actor find/teleport with read-back verification, and (with the BlueprintPythonBridge C++ plugin deployed) node-level graph read/connect that fixes the DSL's missing exec wires.",
+	"Category": "Other",
+	"EditorOnly": true,
+	"CreatedBy": "ue5-automation v3.0",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"IsExperimentalVersion": false,
+	"Installed": false,
+	"EnabledByDefault": true,
+	"Modules": [],
+	"Plugins": [
+		{
+			"Name": "PythonScriptPlugin",
+			"Enabled": true
+		},
+		{
+			"Name": "ToolsetRegistry",
+			"Enabled": true
+		}
+	]
+}

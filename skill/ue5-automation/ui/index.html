@@ -1,0 +1,1663 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ue5-automation · 任务指挥台 v4</title>
+<!--
+  T-20261028-UI-V5 · 视觉刷新（参考 UEBox theme/typography token + Linear/Vercel 浅色仪表盘）
+  =====================================================================
+  · 去彩色左边框 / 去 KPI 渐变，纯白卡面 + 细分隔线；圆角阶梯 8/10/12
+  · 阴影减淡（1px 级），悬停统一 150ms；行高 1.65；三级文字对比度提升
+  · 技术层错误折叠（与任务失败重复，默认收起）；空状态给出下一步动作
+  · 键盘可达性：:focus-visible 焦点环；scrollbar-gutter 防跳动
+  =====================================================================
+  T-20261025-UI-V4 · 用户视角全链路（依据用户 2026-10-26 反馈）
+  =====================================================================
+  ① 修复「任务成功但步骤进度不动」：后端惰性封口（task_journal._normalize_finished）
+     + 面板对 finished 任务显示「已收尾」而非悬挂进度
+  ② 功能区明确：阶段轨道（①需求→②逻辑→③执行→④复盘）+ 每段独立卡片
+     + 左侧色条 + 序号徽章 —— 一眼看出"现在在哪一段"
+  ③ 全链路可视化：用户原话（verbatim）→ 我理解成（要点）→ 实现逻辑（流程节点）
+     → 执行脉络（步骤 + 每步命令流水：下发了什么命令/参数/UE 返回/UE 内动作）
+  · 白底主题 + 深色码块；永久只读；单文件无依赖
+  · DOM 契约 id 全部保留（tests/test_dashboard.py）
+-->
+<style>
+  :root{
+    --bg:#f5f7fa; --panel:#ffffff; --panel2:#f8fafc; --line:#e6eaf0;
+    --fg:#0f172a; --dim:#55657a; --faint:#7f8b9c;
+    --mono:"Cascadia Code",Consolas,"Courier New",monospace;
+    --disp:"Outfit","Segoe UI Variable Display","Segoe UI",sans-serif;
+    --accent:#4f46e5; --accent2:#6366f1; --accent-soft:#eef2ff; --accent-line:#c7d2fe;
+    --ok:#059669; --ok-soft:#ecfdf5; --err:#dc2626; --err-soft:#fef2f2;
+    --warn:#b45309; --warn-soft:#fffbeb;
+    --code-bg:#0f172a; --code-fg:#e2e8f0;
+    --shadow:0 1px 2px rgba(16,24,40,.04);
+    --shadow-lg:0 4px 14px -2px rgba(16,24,40,.08),0 2px 4px rgba(16,24,40,.04);
+    --r-sm:8px; --r-md:10px; --r-lg:12px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;color:var(--fg);background:var(--bg);
+    font:14px/1.65 "Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI",
+          "Microsoft YaHei",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+
+  /* ═══ 侧栏 ═══ */
+  aside{position:fixed;left:0;top:0;bottom:0;width:262px;background:var(--panel);
+    border-right:1px solid var(--line);display:flex;flex-direction:column;z-index:30}
+  .brand{display:flex;align-items:center;gap:11px;padding:20px 18px 16px}
+  .mark{width:34px;height:34px;border-radius:10px;flex:0 0 auto;
+    background:linear-gradient(135deg,#818cf8,#4338ca 70%);
+    display:flex;align-items:center;justify-content:center;color:#fff;
+    font-family:var(--disp);font-weight:800;font-size:12px;
+    box-shadow:0 3px 8px rgba(79,70,229,.35)}
+  .pname{font-family:var(--disp);font-weight:700;font-size:14px}
+  .psub{font-size:11px;color:var(--faint)}
+  .side-group{padding:10px 12px 0}
+  .side-group-label{padding:8px 8px 6px;font-size:11px;font-weight:800;
+    letter-spacing:.11em;color:var(--faint);text-transform:uppercase}
+  .nav-item{display:flex;align-items:center;gap:10px;padding:9px 13px;width:100%;
+    border:none;background:transparent;border-radius:10px;cursor:pointer;
+    font-size:14px;font-weight:600;color:var(--dim);text-align:left;transition:all .15s}
+  .nav-item:hover{background:var(--panel2);color:var(--fg)}
+  .nav-item:focus-visible,.titem:focus-visible,.stage:focus-visible,
+  #task-filter button:focus-visible,summary:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px}
+  .nav-item.on{background:var(--accent-soft);color:var(--accent)}
+  .nav-item .ni{font-size:15.5px;width:18px;text-align:center}
+  #task-filter{display:flex;gap:3px;padding:0 8px 8px}
+  #task-filter button{flex:1;border:1px solid var(--line);background:var(--panel2);
+    border-radius:7px;padding:3px 0;font-size:11px;color:var(--dim);cursor:pointer}
+  #task-filter button:hover{border-color:var(--accent-line);color:var(--accent)}
+  #task-filter button.on{background:var(--accent-soft);border-color:var(--accent-line);
+    color:var(--accent);font-weight:700}
+  #task-list{flex:1;overflow-y:auto;padding:0 12px 10px;display:flex;
+    flex-direction:column;gap:4px;scrollbar-gutter:stable}
+  #task-list{gap:7px}
+  .titem{padding:10px 12px;border-radius:9px;cursor:pointer;background:var(--panel);
+    border:1px solid var(--line);border-left:3px solid transparent;
+    transition:background .15s,border-color .15s,transform .15s}
+  .titem:hover{border-color:var(--accent-line);background:#fff;transform:translateY(-1px)}
+  .titem.sel{background:var(--accent-soft);border-color:var(--accent-line);
+    border-left-color:var(--accent)}
+  .titem .t-goal{font-size:13px;font-weight:650;line-height:1.45;color:var(--fg);
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    overflow:hidden}
+  .titem .t-meta{font-size:11px;color:var(--dim);display:block;margin-top:4px;
+    font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block;
+    vertical-align:-1px;margin-right:4px}
+  .uv{display:inline-block;vertical-align:-1px;font-size:10px;
+    font-weight:700;line-height:1.5;color:var(--warn);
+    background:var(--warn-soft);border:1px solid #fde68a;border-radius:99px;
+    padding:0 6px;margin-left:2px}
+  .dot.running{background:var(--accent)} .dot.success{background:var(--ok)}
+  .dot.failed{background:var(--err)} .dot.aborted{background:var(--faint)}
+  .side-foot{border-top:1px solid var(--line);padding:12px 16px 14px}
+  .side-foot .kpi-mini{font-size:12px;color:var(--dim);font-family:var(--mono);
+    margin-bottom:8px}
+  #token-input{width:100%;background:var(--panel2);border:1px solid var(--line);
+    border-radius:8px;padding:6px 10px;color:var(--fg);font-family:var(--mono);
+    font-size:12px}
+  #token-input:focus{outline:none;border-color:var(--accent);
+    box-shadow:0 0 0 3px var(--accent-soft);background:#fff}
+  #conn-status{font-size:12px;font-weight:600;display:flex;align-items:center;
+    gap:6px;margin-top:8px}
+  #conn-status::before{content:"";width:6px;height:6px;border-radius:50%;
+    background:currentColor;flex:0 0 auto}
+  #auth-banner{position:fixed;top:14px;left:calc(262px + 50% - 131px);
+    transform:translateX(-50%);z-index:60;display:none;align-items:center;gap:10px;
+    padding:9px 14px;border-radius:10px;background:#fffbeb;border:1px solid #fcd34d;
+    box-shadow:var(--shadow-lg);font-size:12.5px;color:#78350f;max-width:min(720px,90vw)}
+  #auth-banner.on{display:flex}
+  #auth-banner code{font-family:var(--mono);font-size:11.5px;
+    background:#fef3c7;padding:1px 5px;border-radius:5px}
+  #auth-banner button{border:1px solid #f59e0b;background:#fff;color:#92400e;
+    font:600 12px inherit;font-family:inherit;border-radius:7px;padding:4px 10px;
+    cursor:pointer}
+  #auth-banner button:hover{background:#fffbeb}
+  .ok{color:var(--ok)} .auth{color:var(--warn)} .errc{color:var(--err)}
+
+  /* ═══ 主区 ═══ */
+  .view{margin-left:262px;min-height:100vh}
+  .view-inner{max-width:1060px;margin:0 auto;padding:22px 34px 46px}
+  .kpi-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:2px 0 12px}
+  .kpi{border-radius:var(--r-lg);padding:15px 18px;border:1px solid var(--line);
+    background:var(--panel);box-shadow:var(--shadow);
+    transition:box-shadow .15s ease,transform .15s ease}
+  .kpi:hover{box-shadow:var(--shadow-lg);transform:translateY(-1px)}
+  .kpi b{display:block;font-family:var(--disp);font-size:26px;font-weight:800;
+    letter-spacing:-.02em;line-height:1.15;font-variant-numeric:tabular-nums}
+  .kpi span{font-size:12px;color:var(--dim)}
+  .kpi.indigo b{color:#4338ca}
+  .kpi.green b{color:#047857}
+  .kpi.amber b{color:#b45309}
+  .kpi.slate b{color:#334155}
+
+  /* 阶段轨道（功能区导航：一眼看出在哪一段） */
+  #stage-rail{position:sticky;top:0;z-index:12;display:grid;
+    grid-template-columns:repeat(5,1fr);gap:7px;padding:12px 0 12px;
+    background:linear-gradient(180deg,var(--bg) 82%,rgba(245,247,250,0))}
+  .stage{display:flex;gap:8px;align-items:center;padding:8px 11px;cursor:pointer;
+    border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);
+    box-shadow:var(--shadow);transition:all .15s ease}
+  .stage:hover{border-color:var(--accent-line);transform:translateY(-1px);
+    box-shadow:var(--shadow-lg)}
+  .stage .sn{width:22px;height:22px;border-radius:6px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--disp);font-weight:800;font-size:12px;
+    background:var(--panel2);color:var(--faint);border:1px solid var(--line)}
+  .stage .st{font-size:13px;font-weight:700;color:var(--dim)}
+  .stage .sd{font-size:11px;color:var(--faint);font-family:var(--mono)}
+  .stage.done .sn{background:var(--ok);border-color:var(--ok);color:#fff}
+  .stage.done .st{color:var(--fg)}
+  .stage.cur{border-color:var(--accent-line);background:var(--accent-soft)}
+  .stage.cur .sn{background:var(--accent);border-color:var(--accent);color:#fff}
+  .stage.cur .st{color:var(--accent)}
+
+  /* 独立卡片分区 */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r-lg);
+    padding:0;margin-bottom:12px;box-shadow:var(--shadow);overflow:hidden}
+  .card-head{display:flex;align-items:center;gap:10px;padding:13px 20px;
+    border-bottom:1px solid var(--line);background:var(--panel)}
+  .card-head .no{width:24px;height:24px;border-radius:7px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--disp);font-weight:800;font-size:12px;color:#fff}
+  .c-req .no{background:#6366f1} .c-logic .no{background:#0ea5e9}
+  .c-exec .no{background:#4f46e5} .c-retro .no{background:#059669}
+  .card-head .tt{font-size:15.5px;font-weight:700;letter-spacing:-.01em}
+  .card-head .sub{font-size:12px;color:var(--faint)}
+  .card-body{padding:14px 20px 18px}
+
+  /* 档案头（任务标题区） */
+  .hero{padding:16px 20px 14px;background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--r-lg);margin-bottom:12px;box-shadow:var(--shadow)}
+  .hero-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .badge{font-size:12px;font-weight:700;border-radius:99px;padding:3px 12px;color:#fff}
+  .badge.success{background:var(--ok)} .badge.failed{background:var(--err)}
+  .badge.aborted{background:var(--faint)} .badge.running{background:var(--accent)}
+  .dossier-meta{font-size:13px;color:var(--dim);font-family:var(--mono)}
+  .unverified{font-size:12px;font-weight:700;color:#fff;background:var(--warn);
+    border-radius:99px;padding:2px 10px}
+  .undo-chip{font-size:12px;font-weight:700;color:var(--accent);background:var(--accent-soft);
+    border:1px solid var(--accent-line);border-radius:99px;padding:2px 10px;cursor:help}
+  .undo-chip.done{color:var(--dim);background:var(--panel2);border-color:var(--line)}
+  #dossier-goal{margin:10px 0 0;font-family:var(--disp);font-size:22px;
+    font-weight:700;letter-spacing:-.015em;line-height:1.4}
+  .ev-chips{display:flex;gap:5px;flex-wrap:wrap;margin-left:auto}
+  .ev-chip{font-size:11px;font-family:var(--mono);background:var(--panel2);
+    border:1px solid var(--line);border-radius:99px;padding:1px 9px;color:var(--dim)}
+  .ev-chip.verify{border-color:var(--accent-line);color:var(--accent);
+    background:var(--accent-soft)}
+  .tprogress{margin:14px 0 0;height:7px;border-radius:99px;background:var(--panel2);
+    border:1px solid var(--line);overflow:hidden}
+  .tprogress i{display:block;height:100%;border-radius:99px;
+    background:linear-gradient(90deg,#818cf8,#4f46e5);
+    transition:width .5s cubic-bezier(.22,1,.36,1)}
+  .steps-label{margin-top:7px;font-size:12px;color:var(--faint);font-family:var(--mono)}
+
+  /* ① 原话 vs 理解 */
+  .req-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .req-col{border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .req-col .rc-head{font-size:11px;font-weight:800;letter-spacing:.07em;
+    padding:6px 12px;color:var(--dim);background:var(--panel2);
+    border-bottom:1px solid var(--line)}
+  .req-col .rc-body{padding:12px 14px;font-size:14px}
+  .verbatim{font-style:italic;color:#334155;white-space:pre-wrap;
+    border-left:3px solid #cbd5e1;padding-left:10px}
+  .chk-list{display:grid;gap:8px}
+  .chk{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;
+    background:var(--panel2);border:1px solid var(--line);border-radius:8px}
+  .chk .ck{flex:0 0 19px;height:19px;border-radius:50%;margin-top:2px;
+    background:var(--ok-soft);border:1.5px solid var(--ok);color:var(--ok);
+    display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
+  .chk .tx{font-size:13px}
+  .no-data{font-size:13px;color:var(--faint);font-style:italic}
+
+  /* ② 流程节点 */
+  .flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:9px}
+  .flow-node{background:var(--panel2);border:1.5px solid var(--line);
+    border-radius:9px;padding:10px 15px;font-size:13px;font-weight:600;
+    display:flex;align-items:center;gap:8px;transition:all .15s}
+  .flow-node:hover{border-color:var(--accent-line);background:var(--accent-soft)}
+  .flow-node .fi{font-size:10px;font-family:var(--mono);color:var(--faint);
+    letter-spacing:.04em}
+  .flow-arrow{align-self:center;color:var(--faint);font-weight:700}
+  .flow-plain{font-size:14px}
+
+  /* ③ 执行脉络 */
+  .timeline{position:relative;padding-left:2px}
+  .step{border:1px solid var(--line);border-radius:var(--r-md);margin-bottom:10px;
+    background:var(--panel2);overflow:hidden;transition:border-color .15s}
+  .step.cur{border-color:var(--accent-line);background:#f7f8ff}
+  .step.failed{border-color:#fecaca;background:var(--err-soft)}
+  .step-top{display:flex;gap:12px;padding:12px 14px;align-items:flex-start}
+  .step .ico{flex:0 0 30px;height:30px;margin-top:1px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    background:#fff;border:2px solid var(--line);font-family:var(--disp);
+    font-weight:800;font-size:13px;color:var(--faint)}
+  .step.cur .ico{background:var(--accent);border-color:var(--accent);color:#fff}
+  .step.done .ico{background:var(--ok);border-color:var(--ok);color:#fff}
+  .step.failed .ico{background:var(--err);border-color:var(--err);color:#fff}
+  .step .bd{flex:1;min-width:0}
+  .step .nm{font-weight:700;font-size:14px;display:flex;gap:8px;
+    align-items:baseline;flex-wrap:wrap}
+  .step .nm .tag{font-size:11px;font-weight:700;letter-spacing:.08em;
+    color:var(--faint);font-family:var(--mono)}
+  .step .note{font-size:13px;color:var(--dim);margin-top:3px}
+  .step .hint{font-size:11px;color:var(--faint);font-family:var(--mono)}
+  .slog{margin-top:8px;border-left:2px solid var(--line);padding-left:10px;
+    display:grid;gap:3px}
+  .slog .sl{display:flex;gap:8px;font-size:12px;color:var(--dim);align-items:baseline}
+  .slog .st{color:var(--faint);font-family:var(--mono);font-size:11px;flex:0 0 42px}
+
+  /* 命令流水（用户最想看的一层） */
+  .cmdflow{margin:10px 14px 12px;border:1px solid var(--line);border-radius:9px;
+    background:var(--panel);overflow:hidden}
+  .cmdflow summary{cursor:pointer;padding:7px 12px;font-size:12px;font-weight:700;
+    color:var(--dim);background:var(--panel2);border-bottom:1px solid var(--line);
+    user-select:none;transition:background .15s ease,color .15s ease}
+  .cmdflow summary:hover{background:var(--accent-soft);color:var(--accent)}
+  .cmd{border-top:1px dashed var(--line);padding:8px 12px}
+  .cmd:first-child{border-top:none}
+  .cmd-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .cmd-name{font-family:var(--mono);font-size:12px;font-weight:700;color:#334155}
+  .cmd-ms{font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .cmd-ok{font-size:11px;font-weight:800;color:var(--ok)}
+  .cmd-bad{font-size:11px;font-weight:800;color:var(--err)}
+  .cmd-args{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:3px}
+  .cmd-ue{font-size:12px;color:#0369a1;margin-top:3px}
+  .cmd-res{font-family:var(--mono);font-size:11px;color:var(--dim);margin-top:3px}
+  .cmd-res b{color:var(--ok)} .cmd-res i{color:var(--err);font-style:normal}
+
+  /* 证据图 */
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:10px 14px 12px}
+  .pair .cap{grid-column:1/-1;font-size:13px;color:#713f12;background:var(--warn-soft);
+    border-left:3px solid var(--warn);padding:6px 10px;border-radius:0 6px 6px 0}
+  .pair figure{margin:0;border:1px solid var(--line);border-radius:9px;
+    overflow:hidden;background:var(--panel2)}
+  .pair img{width:100%;display:block;cursor:zoom-in}
+  .pair figcaption{font-size:11px;padding:4px 10px;color:var(--dim);
+    border-top:1px solid var(--line);font-family:var(--mono);
+    display:flex;justify-content:space-between;background:#fff}
+  .pair figcaption i{font-style:normal;font-weight:700}
+  .pair figcaption .a{color:var(--accent)} .pair figcaption .b{color:var(--warn)}
+  .evb{font-size:12px;font-family:var(--mono);color:var(--dim);
+    margin:8px 14px 10px}
+  .evb a{color:var(--accent);text-decoration:none}
+
+  /* ④ 交付物 */
+  .c-deliver .no{background:#d97706}
+  .deliver-table{width:100%;border-collapse:separate;border-spacing:0 6px}
+  .deliver-table th{font-size:11px;font-weight:800;letter-spacing:.06em;
+    color:var(--faint);text-align:left;padding:0 10px 4px}
+  .deliver-table td{background:var(--panel2);border-top:1px solid var(--line);
+    border-bottom:1px solid var(--line);padding:9px 10px;font-size:13px;
+    vertical-align:top}
+  .deliver-table td:first-child{border-left:1px solid var(--line);
+    border-radius:8px 0 0 8px;white-space:nowrap}
+  .deliver-table td:last-child{border-right:1px solid var(--line);
+    border-radius:0 8px 8px 0}
+  .deliver-table .dpath{font-family:var(--mono);font-size:12px;color:#334155;
+    word-break:break-all}
+  .deliver-table .dnote{color:var(--dim);font-size:12px}
+  .tag-created{background:#dcfce7;color:#166534}
+  .tag-modified{background:#dbeafe;color:#1e40af}
+  .tag-evidence{background:#f3e8ff;color:#6b21a8}
+  .tag-verified{background:#fef3c7;color:#92400e}
+  .dtag{font-size:11px;font-weight:800;border-radius:99px;padding:1px 8px}
+  .inferred-note{font-size:11px;color:var(--faint);font-style:italic;margin-bottom:6px}
+  .verify-box{background:var(--ok-soft);border:1px solid #a7f3d0;border-radius:9px;
+    padding:12px 15px;font-size:13.5px}
+  .verify-box .vb-title{font-size:11px;font-weight:800;letter-spacing:.07em;
+    color:#047857;margin-bottom:5px}
+  .verify-box ol{margin:0;padding-left:20px}
+  .verify-box li{margin:3px 0}
+  .no-deliver{color:var(--faint);font-size:13px;font-style:italic}
+
+  /* ⑤ 复盘 */
+  .tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:14px}
+  .tile{border:1px solid var(--line);border-radius:var(--r-md);padding:14px 16px;
+    background:var(--panel2);text-align:center}
+  .tile b{display:block;font-family:var(--disp);font-size:24px;font-weight:800;
+    font-variant-numeric:tabular-nums}
+  .tile span{font-size:12px;color:var(--dim)}
+  .tile.bad b{color:var(--err)}
+  .retro{border:1px solid #fde68a;border-radius:var(--r-md);overflow:hidden}
+  .retro .rt-head{padding:12px 18px;font-weight:700;font-size:14px;
+    display:flex;align-items:center;gap:9px;background:#fef9ec}
+  .retro.bad .rt-head{background:#fef2f2}
+  .retro .rt-body{padding:14px 18px 16px;background:#fff}
+  .retro .summary{font-size:14px}
+  .retro .lessons{margin-top:10px;padding:11px 14px;border-radius:11px;
+    background:var(--warn-soft);border:1px dashed #fcd34d;color:#713f12;font-size:13px}
+  .retro .lessons::before{content:"经验";display:block;font-size:11px;
+    font-weight:800;letter-spacing:.08em;color:var(--warn);margin-bottom:3px}
+  .retro.bad .lessons{background:var(--err-soft);border-color:#fecaca;color:#7f1d1d}
+  .retro.bad .lessons::before{content:"反思";color:var(--err)}
+  .retro .rollback-note{margin-top:10px;padding:10px 14px;border-radius:8px;
+    background:var(--accent-soft);border:1px solid var(--accent-line);
+    color:var(--accent);font-size:13px;font-weight:600}
+
+  /* 操作按钮（接入页复制配置等） */
+  .nbtn{border:1px solid var(--line);background:var(--panel);color:var(--fg);
+    font-family:inherit;font-size:13px;font-weight:600;line-height:1;
+    border-radius:8px;padding:9px 16px;cursor:pointer;
+    transition:all .15s ease}
+  .nbtn:hover{border-color:var(--accent-line);color:var(--accent);
+    background:var(--accent-soft)}
+  .nbtn:active{transform:translateY(1px)}
+  .nbtn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .nbtn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  .nbtn.primary:hover{background:#4338ca;border-color:#4338ca;color:#fff}
+  .nbtn.primary:active{background:#3730a3}
+
+  /* 空段落：收紧内边距，减少无内容卡片占位 */
+  .card.empty .card-body{padding:10px 20px 12px}
+  .card.empty .card-head{padding-bottom:11px}
+  .card.empty .no-data{font-size:12.5px}
+
+  /* 响应式（桌面为主，兼顾窄窗口） */
+  @media (max-width: 1180px){
+    .view-inner{padding:18px 22px 40px}
+    #stage-rail{gap:5px}
+    .stage{padding:7px 9px}
+  }
+  @media (max-width: 1000px){
+    aside{width:226px}
+    .view{margin-left:226px}
+    .kpi-bar{grid-template-columns:repeat(2,1fr)}
+    #stage-rail{grid-template-columns:repeat(3,1fr)}
+    .req-grid{grid-template-columns:1fr}
+    .tiles{grid-template-columns:repeat(3,1fr)}
+    .deliver-table .dnote{display:none}
+  }
+  @media (max-width: 760px){
+    .view-inner{padding:14px 14px 32px}
+    #stage-rail{grid-template-columns:repeat(2,1fr)}
+    .usr{display:none}
+  }
+
+  .sc-list{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+    border-radius:var(--r-sm);overflow:hidden}
+  .sc-row{display:flex;align-items:center;gap:10px;padding:9px 12px;
+    background:var(--panel);font-size:12px}
+  .sc-badge{font-size:10px;font-weight:650;border-radius:4px;padding:1px 6px}
+  .sc-badge.ok{background:var(--ok-soft);color:var(--ok)}
+  .sc-badge.bad{background:var(--err-soft);color:var(--err)}
+  .sc-name{font-weight:600;color:var(--fg);overflow:hidden;text-overflow:ellipsis;
+    white-space:nowrap;flex:1}
+  .sc-meta{font-size:10.5px;color:var(--faint);font-family:var(--mono)}
+
+  .rcpt-wrap{margin-top:14px}
+  .rcpt{display:flex;align-items:center;gap:9px;padding:7px 10px;
+    border-top:1px solid var(--line);font-size:11.5px}
+  .rcpt:first-of-type{border-top:0}
+  .rc-badge{font-size:9.5px;font-weight:650;border-radius:4px;padding:0 5px}
+  .rc-badge.ok{background:var(--ok-soft);color:var(--ok)}
+  .rc-badge.bad{background:var(--err-soft);color:var(--err)}
+  .rc-cmd{font-family:var(--mono);color:var(--dim);min-width:110px}
+  .rc-asset{color:var(--fg);font-weight:600;flex:1;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .rc-hash{font-family:var(--mono);color:var(--faint)}
+  .rc-ts{font-family:var(--mono);color:var(--faint)}
+
+  /* 调试视图 */
+  #view-debug .panel{background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--r-lg);padding:22px 26px;box-shadow:var(--shadow)}
+  #view-debug .view-head{padding:8px 0 16px}
+  .view-title{font-family:var(--disp);font-size:19px;font-weight:700}
+  .view-sub{font-size:13px;color:var(--dim);margin-top:2px}
+  .dbg-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;
+    margin-bottom:18px}
+  .dbg-tile{border:1px solid var(--line);border-radius:9px;padding:13px 15px;
+    background:var(--panel2)}
+  .dbg-tile b{display:block;font-family:var(--disp);font-size:19px;font-weight:700;
+    margin-bottom:2px;word-break:break-all}
+  #dbg-project{font-size:14px;white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis}
+  .dbg-tile span{font-size:12px;color:var(--dim)}
+  .dbg-sum{background:var(--accent-soft);border:1px solid var(--accent-line);
+    border-radius:9px;padding:11px 15px;font-size:13px;margin-bottom:14px}
+  .sec-mini{font-size:11px;font-weight:800;color:var(--faint);
+    letter-spacing:.08em;margin:6px 0 8px}
+  .dbg-fold{margin-top:16px;border:1px solid var(--line);border-radius:9px;
+    background:var(--panel)}
+  .dbg-fold>summary{cursor:pointer;padding:9px 13px;font-size:12px;font-weight:700;
+    color:var(--dim);user-select:none;transition:color .15s ease}
+  .dbg-fold>summary:hover{color:var(--accent)}
+  .dbg-fold[open]>summary{border-bottom:1px solid var(--line)}
+  .dbg-fold>#recent-errors{padding:10px 13px 12px}
+  .err-list{display:grid;gap:7px}
+  .err-row{display:flex;gap:10px;align-items:baseline;font-size:13px;
+    background:var(--err-soft);border:1px solid #fecaca;border-radius:9px;
+    padding:7px 11px}
+  .err-row .et{color:var(--faint);font-family:var(--mono);font-size:11px;flex:0 0 88px;white-space:nowrap}
+  .ok-pill{color:var(--ok);font-size:13px}
+  .code2{background:var(--code-bg);color:var(--code-fg);border-radius:8px;
+    padding:10px 12px;font-family:var(--mono);font-size:12px;overflow-x:auto}
+  #event-list{max-height:360px;overflow-y:auto;margin-top:8px}
+  #event-list .erow{display:flex;gap:10px;padding:2.5px 3px;
+    border-bottom:1px dashed rgba(226,232,240,.22)}
+  #event-list .t{color:#94a3b8;flex:0 0 60px}
+
+  /* 灯箱 */
+  #lightbox{position:fixed;inset:0;background:rgba(8,12,22,.8);display:none;
+    align-items:center;justify-content:center;z-index:50;cursor:zoom-out;
+    backdrop-filter:blur(6px)}
+  #lightbox.on{display:flex}
+  #lightbox img{max-width:92vw;max-height:88vh;border-radius:12px;
+    box-shadow:0 24px 60px rgba(0,0,0,.5)}
+  #lightbox .lb-cap{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    color:#cbd5e1;font:12px var(--mono);background:rgba(15,23,42,.75);
+    padding:5px 16px;border-radius:99px}
+  .foot{color:var(--faint);font-size:11px;text-align:center;padding:8px 0 26px}
+  ::-webkit-scrollbar{width:8px;height:8px}
+  ::-webkit-scrollbar-thumb{background:#d5dbe4;border-radius:99px}
+  ::-webkit-scrollbar-track{background:transparent}
+  @media (prefers-reduced-motion: reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important}
+  }
+
+  /* ═══════════════════════════════════════════════════════════
+     v6.1 · 编辑级极简主题（覆盖层）
+     单色为主 + 一个强调色；发丝线代替阴影；数字用等宽数位。
+     ═══════════════════════════════════════════════════════════ */
+  :root{
+    --bg:#f7f7f8; --panel:#ffffff; --panel2:#fafafa; --line:#e8e8ec;
+    --fg:#111214; --dim:#5f6368; --faint:#9aa0a6;
+    --accent:#5b5bd6; --accent2:#6e6ade;
+    --accent-soft:#f2f2fe; --accent-line:#dedef7;
+    --ok:#1a7f37; --ok-soft:#eef7f0; --err:#c62828; --err-soft:#fdf0f0;
+    --warn:#9a6700; --warn-soft:#fdf8ec;
+    --shadow:none;
+    --shadow-lg:0 10px 30px rgba(17,18,20,.07);
+    --r-sm:6px; --r-md:8px; --r-lg:10px;
+  }
+  body{background:var(--bg);color:var(--fg);letter-spacing:-.005em}
+  b,strong{font-weight:650}
+  .kpi b,.tile b,.dbg-tile b,.stage .sn,.card-head .no,
+  .titem .t-meta,.dossier-meta,.steps-label{font-variant-numeric:tabular-nums}
+
+  /* 侧栏 */
+  aside{width:248px;background:#fbfbfc;border-right:1px solid var(--line)}
+  .view{margin-left:248px}
+  .brand{padding:20px 16px 14px;gap:10px}
+  .mark{width:28px;height:28px;border-radius:7px;background:#111214;
+    box-shadow:none;font-size:10.5px;font-weight:700;letter-spacing:.02em}
+  .pname{font-size:13px;font-weight:650;letter-spacing:-.01em}
+  .psub{font-size:10.5px;color:var(--faint);letter-spacing:.02em}
+  .side-group-label{font-size:10px;font-weight:650;letter-spacing:.12em;
+    color:var(--faint);padding:10px 10px 6px}
+  .nav-item{padding:8px 10px;border-radius:7px;font-size:13px;font-weight:550;
+    color:var(--dim);gap:9px}
+  .nav-item .ni{width:16px;height:16px;display:inline-flex;align-items:center;
+    justify-content:center;color:currentColor;font-size:0}
+  .nav-item .ni svg{width:16px;height:16px}
+  .nav-item:hover{background:#f2f2f4;color:var(--fg)}
+  .nav-item.on{background:#f0f0f4;color:var(--fg);font-weight:650}
+  .nav-item.on .ni{color:var(--accent)}
+
+  /* 任务筛选：分段控件 */
+  #task-filter{gap:2px;padding:0 8px 10px}
+  #task-filter button{flex:1;border:0;background:transparent;border-radius:6px;
+    padding:5px 0;font-size:10.5px;font-weight:550;color:var(--faint);
+    letter-spacing:.01em}
+  #task-filter button:hover{color:var(--fg);background:#f2f2f4}
+  #task-filter button.on{background:#fff;color:var(--fg);font-weight:650;
+    box-shadow:0 1px 2px rgba(17,18,20,.06)}
+
+  /* 任务列表 */
+  #task-list{padding:0 8px 10px;gap:1px}
+  .titem{padding:10px 10px;border-radius:7px;border:1px solid transparent;
+    border-left:2px solid transparent;background:transparent;box-shadow:none;
+    transition:background .12s ease,border-color .12s ease}
+  .titem:hover{background:#f5f5f6;border-color:transparent;
+    border-left-color:transparent;transform:none}
+  .titem.sel{background:#fff;border-color:var(--line);
+    border-left-color:var(--accent);box-shadow:0 1px 2px rgba(17,18,20,.04)}
+  .titem .t-goal{font-size:12.5px;font-weight:600;line-height:1.45;color:var(--fg)}
+  .titem .t-meta{font-size:10.5px;color:var(--faint);margin-top:3px}
+  .titem .t-meta .dot{width:5px;height:5px;margin-right:5px;vertical-align:1px}
+  .uv{font-size:9.5px;font-weight:600;color:var(--warn);background:transparent;
+    border:1px solid #eadfc4;border-radius:4px;padding:0 4px;margin-left:6px}
+  .side-foot{background:#fbfbfc;border-top:1px solid var(--line);padding:12px 14px}
+  #token-input{background:#fff;border:1px solid var(--line);border-radius:6px;
+    font-size:11px;padding:6px 9px}
+  #conn-status{font-size:11px;font-weight:550}
+
+  /* KPI：单色数字 + 小号大写标签 */
+  .kpi-bar{gap:1px;padding:0 0 14px;background:var(--line);
+    border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+  .kpi{background:var(--panel);border:0;border-radius:0;box-shadow:none;
+    padding:16px 18px}
+  .kpi:hover{box-shadow:none;transform:none}
+  .kpi b{font-size:26px;font-weight:650;letter-spacing:-.03em;color:var(--fg)}
+  .kpi span{font-size:10.5px;color:var(--faint);letter-spacing:.02em}
+  .kpi.indigo b,.kpi.green b,.kpi.amber b,.kpi.slate b{color:var(--fg)}
+
+  /* 阶段轨道：一个容器 + 发丝分隔的极简步骤器 */
+  #stage-rail{gap:0;padding:0;background:var(--panel);
+    border:1px solid var(--line);border-radius:var(--r-lg);
+    overflow:hidden;box-shadow:none;backdrop-filter:none;
+    margin-bottom:14px;position:sticky;top:10px;z-index:12}
+  .stage{border:0;border-right:1px solid var(--line);border-radius:0;
+    box-shadow:none;background:transparent;padding:11px 14px;gap:9px}
+  .stage:last-child{border-right:0}
+  .stage:hover{box-shadow:none;transform:none;background:#fafafa;
+    border-color:var(--line);border-right-color:var(--line)}
+  .stage.cur{background:var(--accent-soft);border-color:var(--line)}
+  .stage .sn{width:20px;height:20px;border-radius:50%;background:transparent;
+    border:1px solid var(--line);color:var(--faint);font-size:10.5px;
+    font-weight:600}
+  .stage.done .sn{background:var(--fg);border-color:var(--fg);color:#fff}
+  .stage.cur .sn{background:var(--accent);border-color:var(--accent);color:#fff}
+  .stage .st{font-size:12px;font-weight:600;color:var(--dim)}
+  .stage.cur .st{color:var(--accent)}
+  .stage .sd{font-size:10px;color:var(--faint);font-family:inherit;
+    letter-spacing:.01em}
+
+  /* 档案头 */
+  .hero{background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--r-lg);box-shadow:none;padding:18px 20px 16px}
+  .badge{font-size:10.5px;font-weight:650;border-radius:5px;padding:2px 8px;
+    letter-spacing:.02em}
+  .badge.success{background:var(--ok-soft);color:var(--ok)}
+  .badge.failed{background:var(--err-soft);color:var(--err)}
+  .badge.aborted{background:#f2f2f4;color:var(--dim)}
+  .badge.running{background:var(--accent-soft);color:var(--accent)}
+  .dossier-meta{font-size:11px;color:var(--faint);font-family:var(--mono)}
+  .unverified{background:var(--warn-soft);color:var(--warn);border:1px solid #eadfc4;
+    font-size:10.5px;font-weight:600;border-radius:5px;padding:1px 7px}
+  .undo-chip{font-size:10.5px;font-weight:600;border-radius:5px;padding:1px 7px}
+  #dossier-goal{font-size:23px;font-weight:650;letter-spacing:-.025em;
+    line-height:1.35;margin-top:12px}
+  .tprogress{height:4px;background:#f0f0f2;border:0;margin-top:14px}
+  .tprogress i{background:var(--fg);border-radius:99px}
+  .steps-label{font-size:10.5px;color:var(--faint);margin-top:6px}
+
+  /* 卡片 */
+  .card{background:var(--panel);border:1px solid var(--line);
+    border-radius:var(--r-lg);box-shadow:none;margin-bottom:12px}
+  .card-head{padding:13px 20px;border-bottom:1px solid var(--line);
+    background:var(--panel);gap:11px}
+  .card-head .no{width:18px;height:18px;border-radius:0;background:transparent!important;
+    color:var(--faint);font-size:10.5px;font-weight:600;
+    font-family:var(--mono);justify-content:flex-start}
+  .card-head .tt{font-size:13.5px;font-weight:650;letter-spacing:-.01em}
+  .card-head .sub{font-size:11px;color:var(--faint)}
+  .card-body{padding:16px 20px 18px}
+  .req-col{border:1px solid var(--line);border-radius:var(--r-sm)}
+  .req-col .rc-head{background:transparent;border-bottom:1px solid var(--line);
+    font-size:10px;letter-spacing:.1em;color:var(--faint);font-weight:650}
+  .chk{background:transparent;border:1px solid var(--line);border-radius:var(--r-sm)}
+  .flow-node{background:transparent;border:1px solid var(--line);
+    border-radius:var(--r-sm);font-weight:550}
+  .flow-node:hover{border-color:var(--accent-line);background:var(--accent-soft)}
+  .step{background:transparent;border:1px solid var(--line);
+    border-radius:var(--r-sm)}
+  .step.cur{background:var(--accent-soft);border-color:var(--accent-line)}
+  .step.done .ico{background:var(--ok);border-color:var(--ok)}
+  .step.cur .ico{background:var(--accent);border-color:var(--accent)}
+  .cmdflow{border:1px solid var(--line);border-radius:var(--r-sm);background:#fff}
+  .cmdflow summary{background:#fafafa;font-size:11px}
+  .deliver-table td{background:transparent}
+  .verify-box{border-radius:var(--r-sm);background:var(--ok-soft);
+    border-color:#dcefe2}
+  .tiles{gap:1px;background:var(--line);border:1px solid var(--line);
+    border-radius:var(--r-md);overflow:hidden}
+  .tile{background:var(--panel);border:0;border-radius:0;padding:16px}
+  .retro{border:1px solid var(--line);border-radius:var(--r-md)}
+  .retro .rt-head{background:#fafafa;font-size:12.5px;font-weight:650;
+    border-bottom:1px solid var(--line)}
+  .retro .rt-body{background:#fff}
+  .retro .lessons{background:#fdfaf2;border:1px solid #f0e6cd;color:#6b5320;
+    border-radius:var(--r-sm)}
+  .retro .rollback-note{background:var(--accent-soft);border-color:var(--accent-line);
+    border-radius:var(--r-sm);font-weight:550}
+  .nbtn{border-radius:var(--r-sm);font-weight:600}
+  .nbtn.primary{background:#111214;border-color:#111214}
+  .nbtn.primary:hover{background:#000;border-color:#000}
+  .dbg-sum{background:var(--panel2);border-color:var(--line);border-radius:var(--r-sm)}
+  .dbg-fold{border-radius:var(--r-sm)}
+  .code2{border-radius:var(--r-sm);background:#0e0f12}
+  .foot{letter-spacing:.02em}
+
+</style>
+</head>
+<body>
+<div id="auth-banner" role="alert">
+  <span>需要 token：在左下角粘贴 <code>%APPDATA%\ue5_bridge\token</code> 的内容</span>
+  <button id="auth-focus">去粘贴</button>
+</div>
+<aside>
+  <div class="brand">
+    <div class="mark">UE</div>
+    <div><div class="pname">ue5-automation</div><div class="psub">任务指挥台 v4 · 只读</div></div>
+  </div>
+  <div class="side-group">
+    <div class="side-group-label">工作区</div>
+    <button class="nav-item on" id="nav-taskboard"><span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 4.5h10M3 8h10M3 11.5h6"/></svg></span>任务板</button>
+    <button class="nav-item" id="nav-debug"><span class="ni"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8h3l2-4 3 8 2-4h3"/></svg></span>运行状况</button>
+  </div>
+  <div class="side-group" style="flex:1;display:flex;flex-direction:column;min-height:0">
+    <div class="side-group-label">任务</div>
+    <div id="task-filter">
+      <button class="on" data-f="all">全部</button>
+      <button data-f="running">进行中</button>
+      <button data-f="failed">失败</button>
+      <button data-f="success">成功</button>
+    </div>
+    <div id="task-list"></div>
+  </div>
+  <div class="side-foot">
+    <div class="kpi-mini" id="side-kpi">—</div>
+    <input id="token-input" type="password" placeholder="粘贴 token（自动记住本机）" autocomplete="off">
+    <div id="conn-status" class="auth">连接中…</div>
+  </div>
+</aside>
+
+<!-- ═══ 任务板 ═══ -->
+<div class="view" id="view-taskboard">
+  <div class="view-inner">
+    <div class="kpi-bar">
+      <div class="kpi indigo"><b id="kpi-total">0</b><span id="kpi-total-l">总任务数</span></div>
+      <div class="kpi green"><b id="kpi-rate">—</b><span id="kpi-rate-l">成功率</span></div>
+      <div class="kpi amber"><b id="kpi-running">0</b><span id="kpi-running-l">进行中</span></div>
+      <div class="kpi slate"><b id="kpi-duration">—</b><span id="kpi-duration-l">累计耗时</span></div>
+    </div>
+
+    <div id="stage-rail">
+      <div class="stage" data-stage="req"><span class="sn">1</span>
+        <span><span class="st">需求来源</span><div class="sd" id="stage-req-d">你说的</div></span></div>
+      <div class="stage" data-stage="logic"><span class="sn">2</span>
+        <span><span class="st">实现逻辑</span><div class="sd" id="stage-logic-d">怎么做</div></span></div>
+      <div class="stage" data-stage="exec"><span class="sn">3</span>
+        <span><span class="st">执行脉络</span><div class="sd" id="stage-exec-d">做到哪了</div></span></div>
+      <div class="stage" data-stage="deliver"><span class="sn">4</span>
+        <span><span class="st">交付物</span><div class="sd" id="stage-deliver-d">改了什么</div></span></div>
+      <div class="stage" data-stage="retro"><span class="sn">5</span>
+        <span><span class="st">复盘</span><div class="sd" id="stage-retro-d">结果与经验</div></span></div>
+    </div>
+
+    <div id="dossier-empty" class="card" style="padding:52px 20px;text-align:center;color:var(--dim)">
+            <div style="font-size:15px;font-weight:700;color:var(--fg);margin-bottom:6px">
+        还没有任务</div>
+      <div style="font-size:13px;max-width:520px;margin:0 auto;line-height:1.75">
+        对 AI 说一句「给 XX 蓝图加一个 YY 功能」，它接到需求后会先回显
+        <b>你的原话</b>与<b>理解要点</b>，再逐步展示实现逻辑、命令流水与实时结果。<br>
+        每个任务结束后，这里会留下可核查的交付物清单与复盘。</div>
+    </div>
+
+    <div id="dossier-body" style="display:none">
+      <!-- 档案头 -->
+      <div class="hero">
+        <div class="hero-top">
+          <span class="badge" id="dossier-status">—</span>
+          <span class="dossier-meta" id="dossier-meta"></span>
+          <span id="dossier-verify"></span>
+        </div>
+        <div id="dossier-goal"></div>
+        <div class="tprogress"><i id="tprogress-fill" style="width:0%"></i></div>
+        <div class="steps-label" id="hero-steps-label"></div>
+      </div>
+
+      <!-- ① 需求来源 -->
+      <section class="card c-req" id="panel-dossier" data-stage="req">
+        <div class="card-head"><span class="no">1</span>
+          <span class="tt">需求来源</span>
+          <span class="sub">你说的 vs 我理解的</span></div>
+        <div class="card-body">
+          <div class="req-grid">
+            <div class="req-col">
+              <div class="rc-head">你的原话</div>
+              <div class="rc-body"><div class="verbatim" id="dossier-request"></div></div>
+            </div>
+            <div class="req-col">
+              <div class="rc-head">我理解成（开工前和你确认）</div>
+              <div class="rc-body" id="dossier-req"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ② 实现逻辑 -->
+      <section class="card c-logic" id="sec-approach" data-stage="logic">
+        <div class="card-head"><span class="no">2</span>
+          <span class="tt">实现逻辑</span>
+          <span class="sub">打算怎么做</span></div>
+        <div class="card-body" id="dossier-approach"></div>
+      </section>
+
+      <!-- ③ 执行脉络 -->
+      <section class="card c-exec" id="sec-exec" data-stage="exec">
+        <div class="card-head"><span class="no">3</span>
+          <span class="tt">执行脉络</span>
+          <span class="sub">每一步在做什么、结果如何</span></div>
+        <div class="card-body">
+          <div class="timeline" id="dossier-steps"></div>
+        </div>
+      </section>
+
+      <!-- ④ 交付物 -->
+      <section class="card c-deliver" id="sec-deliver" data-stage="deliver" style="display:none">
+        <div class="card-head"><span class="no">4</span>
+          <span class="tt">交付物与验证</span>
+          <span class="sub">改了什么、在哪、怎么验</span></div>
+        <div class="card-body">
+          <div id="deliver-list"></div>
+          <div id="verify-steps" style="margin-top:14px"></div>
+        </div>
+      </section>
+
+      <!-- ⑤ 复盘 -->
+      <section class="card c-retro" id="sec-retro" data-stage="retro" style="display:none">
+        <div class="card-head"><span class="no">5</span>
+          <span class="tt">复盘</span>
+          <span class="sub">结果与经验</span></div>
+        <div class="card-body" id="dossier-retro"></div>
+      </section>
+    </div>
+    <div class="foot">ue5-automation 管理端 · 永久只读（全部 GET）· 单机 127.0.0.1</div>
+  </div>
+</div>
+
+<!-- ═══ 运行状况 ═══ -->
+<div class="view" id="view-debug" style="display:none">
+  <div class="view-inner">
+    <div class="view-head">
+      <div class="view-title">运行状况</div>
+      <div class="view-sub">桥和引擎状态、今天的调用情况 · 桥地址
+        <span id="dbg-bridge-url" style="font-family:var(--mono)"></span> —— 出问题时先看这里</div>
+    </div>
+    <div class="panel">
+      <div class="dbg-tiles">
+        <div class="dbg-tile"><b id="dbg-engine">—</b><span>引擎版本</span></div>
+        <div class="dbg-tile"><b id="dbg-project">—</b><span>当前项目</span></div>
+        <div class="dbg-tile"><b id="dbg-uptime">—</b><span>桥已运行</span></div>
+        <div class="dbg-tile"><b id="dbg-calls">0</b><span>本次进程调用</span></div>
+      </div>
+      <div class="sec-mini">任务结果（持久化，重启不清零）</div>
+      <div class="dbg-tiles" style="margin-bottom:14px">
+        <div class="dbg-tile"><b id="dbg-task-total">0</b><span>总任务</span></div>
+        <div class="dbg-tile"><b id="dbg-task-ok" style="color:var(--ok)">0</b><span>成功</span></div>
+        <div class="dbg-tile"><b id="dbg-task-fail" style="color:var(--err)">0</b><span>失败</span></div>
+        <div class="dbg-tile"><b id="dbg-task-run" style="color:var(--accent)">0</b><span>进行中</span></div>
+      </div>
+      <div id="failed-tasks"></div>
+      <div class="sec-mini" style="margin-top:16px">资产锁（多 Agent）</div>
+      <div id="lock-list" class="sc-list">
+        <div class="ok-pill">当前没有资产锁</div></div>
+      <div class="sec-mini" style="margin-top:16px">验收场景（JUnit 证据）</div>
+      <div id="scenario-list" class="sc-list">
+        <div class="ok-pill">还没有场景记录 —— 调 verify_scenario 跑一条</div></div>
+      <div class="sec-mini" style="margin-top:16px">本次进程的调用统计</div>
+      <div class="dbg-sum" id="call-summary">暂无调用</div>
+      <details class="dbg-fold">
+        <summary>技术层错误记录（HTTP / 步骤级 · 展开查看；与上方任务失败可能重复）</summary>
+        <div id="recent-errors" style="margin-top:8px">
+          <div class="ok-pill">✓ 没有技术层错误记录</div></div>
+      </details>
+      <div class="sec-mini" style="margin-top:16px">原始事件流（更底层的记录）</div>
+      <div id="event-list" class="code2"></div>
+    </div>
+  </div>
+</div>
+
+<div id="lightbox"><img id="lightbox-img" alt=""><div class="lb-cap" id="lightbox-cap"></div></div>
+
+<script>
+/* ═══ token ═══ */
+var TOKEN = (function () {
+  var qp = "";
+  try { qp = (new URLSearchParams(location.search).get("token") || "").trim(); } catch (e) {}
+  if (qp) {
+    try { localStorage.setItem("ue5_ui_token", qp); } catch (e) {}
+    return qp;
+  }
+  try { return localStorage.getItem("ue5_ui_token") || ""; } catch (e) { return ""; }
+})();
+
+function $(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];
+  });
+}
+function showAuthBanner() { $("auth-banner").classList.add("on"); }
+function hideAuthBanner() { $("auth-banner").classList.remove("on"); }
+function api(path) {
+  var headers = {};
+  if (TOKEN) headers["X-Skill-Token"] = TOKEN;   // v6.4.1：token 不再进 URL
+  return fetch(path, {method: "GET", headers: headers})
+    .then(function (r) {
+      if (r.status === 401) { showAuthBanner(); setConn("auth", "未授权 — 粘贴 token"); }
+      return r;
+    });
+}
+function setConn(cls, text) { var el = $("conn-status"); el.className = cls; el.textContent = text; }
+
+/* token 输入：粘贴/回车即生效（v6.0.1 —— 原先输入框没有事件绑定） */
+try { $("token-input").value = TOKEN || ""; } catch (e) {}
+function applyToken() {
+  TOKEN = String(($("token-input") || {}).value || "").trim();
+  try { localStorage.setItem("ue5_ui_token", TOKEN); } catch (e) {}
+  if (!TOKEN) { showAuthBanner(); return; }
+  hideAuthBanner();
+  probe();
+  pollTask();
+  if (curView === "debug") pollDebug();
+}
+$("token-input").addEventListener("change", applyToken);
+$("token-input").addEventListener("keydown", function (e) {
+  if (e.key === "Enter") { e.preventDefault(); applyToken(); }
+});
+$("auth-focus").addEventListener("click", function () {
+  var el = $("token-input");
+  el.focus(); try { el.select(); } catch (e) {}
+});
+function fmtTime(iso) { return String(iso || "").replace("T", " ").slice(5, 19); }
+function fmtDur(sec) {
+  if (sec == null || isNaN(sec)) return "—";
+  if (sec < 90) return Math.round(sec) + "s";
+  return Math.floor(sec / 60) + "m" + Math.round(sec % 60) + "s";
+}
+function shotUrl(name) {
+  return "/ui/api/screenshot?token=" + encodeURIComponent(TOKEN) +
+         "&name=" + encodeURIComponent(name);
+}
+function basename(p) { return String(p || "").split(/[\\/]/).pop(); }
+
+/* KPI 计数 */
+var kpiPrev = {};
+function setKpi(id, val) {
+  var el = $(id);
+  if (String(val) === String(kpiPrev[id])) { el.textContent = val; return; }
+  var from = typeof kpiPrev[id] === "number" ? kpiPrev[id] : 0;
+  var to = typeof val === "number" ? val : parseFloat(val);
+  kpiPrev[id] = to;
+  if (isNaN(to)) { el.textContent = val; return; }
+  var t0 = performance.now();
+  (function tick(t) {
+    var p = Math.min((t - t0) / 300, 1);
+    el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(tick);
+  })(t0);
+}
+
+/* ═══ 连接 ═══ */
+function probe() {
+  var ctl = (typeof AbortController === "function") ? new AbortController() : null;
+  var timer = ctl ? setTimeout(function () { ctl.abort(); }, 4000) : null;
+  var _h = {};
+  if (TOKEN) _h["X-Skill-Token"] = TOKEN;
+  fetch("/health", {headers: _h, signal: ctl ? ctl.signal : undefined})
+    .then(function (r) {
+      if (r.status === 401) { setConn("auth", "未授权 — 侧栏输入 token"); return; }
+      if (!r.ok) throw 0;
+      setConn("ok", "已连接");
+      hideAuthBanner();
+    }).catch(function () { setConn("errc", "未连接"); })
+    .finally(function () { if (timer) clearTimeout(timer); });
+}
+setInterval(probe, 5000); probe();
+
+/* ═══ 视图/阶段 ═══ */
+var curView = "taskboard";
+function switchView(v) {
+  curView = v;
+  $("view-taskboard").style.display = v === "taskboard" ? "" : "none";
+  $("view-debug").style.display = v === "debug" ? "" : "none";
+  $("nav-taskboard").classList.toggle("on", v === "taskboard");
+  $("nav-debug").classList.toggle("on", v === "debug");
+  if (v === "debug") pollDebug();
+}
+$("nav-taskboard").onclick = function () { switchView("taskboard"); };
+$("nav-debug").onclick = function () { switchView("debug"); };
+
+var stageEls = document.querySelectorAll("#stage-rail .stage");
+Array.prototype.forEach.call(stageEls, function (el) {
+  el.addEventListener("click", function () {
+    var key = el.getAttribute("data-stage");
+    var target = document.querySelector('[data-stage="' + key + '"][class*="card"], .card[data-stage="' + key + '"]')
+      || document.querySelector(".card[data-stage='" + key + "']");
+    if (target) target.scrollIntoView({block: "start", behavior: "smooth"});
+  });
+});
+
+/* ═══ 任务状态机 ═══ */
+var allTasks = [], viewTaskId = null, viewTaskKey = null,
+    followLatest = true, taskFilter = "all";
+/* 撤销状态（/ui/api/task 的 undo 字段；旧 DLL/编辑器忙时为 null 或 ok:false） */
+var undoState = null;
+
+function latestTask() { return allTasks[0] || null; }
+function findTask(id) { return allTasks.filter(function (t) { return t.task_id === id; })[0] || null; }
+/* 历史账本里可能有重复 task_id（旧版本同日重启重复分配）→ UI 用 ID+开始时间 作唯一键 */
+function taskKey(t) {
+  return ((t && t.task_id) || "") + "|" + ((t && t.started_at) || "");
+}
+function findTaskByKey(key) {
+  return allTasks.filter(function (t) { return taskKey(t) === key; })[0] || null;
+}
+
+function pollTask() {
+  api("/ui/api/task").then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d) return;
+      undoState = d.undo || null;
+      allTasks = [];
+      if (d.active) allTasks.push(d.active);
+      (d.history || []).forEach(function (t) { allTasks.push(t); });
+      renderKpi(); renderTaskList();
+      var target;
+      if (followLatest || viewTaskKey === null) target = latestTask();
+      else {
+        target = findTaskByKey(viewTaskKey);
+        if (!target) { target = latestTask(); followLatest = true; }
+      }
+      renderDossier(target);
+    }).catch(function () {});
+}
+
+function renderKpi() {
+  var finished = allTasks.filter(function (t) { return t.status === "finished"; });
+  var ok = finished.filter(function (t) { return t.result_status === "success"; });
+  var running = allTasks.filter(function (t) { return t.status === "running"; });
+  var totalSec = finished.reduce(function (a, t) { return a + (t.duration_s || 0); }, 0);
+  setKpi("kpi-total", allTasks.length);
+  var rateEl = $("kpi-rate");
+  var rate = finished.length ? Math.round(ok.length * 100 / finished.length) + "%" : "—";
+  if (rateEl.textContent !== rate) rateEl.textContent = rate;
+  $("kpi-total-l").textContent = "总任务数 · 已结束 " + finished.length;
+  $("kpi-rate-l").textContent = finished.length
+    ? "成功率 · " + ok.length + "/" + finished.length : "成功率";
+  setKpi("kpi-running", running.length);
+  var dur = totalSec ? fmtDur(totalSec) : "—";
+  if ($("kpi-duration").textContent !== dur) $("kpi-duration").textContent = dur;
+  var withDur = finished.filter(function (t) { return t.duration_s != null; });
+  var avg = withDur.length ? totalSec / withDur.length : null;
+  $("kpi-duration-l").textContent = avg != null
+    ? "累计耗时 · 均 " + fmtDur(avg) : "累计耗时";
+  $("side-kpi").textContent = "总任务 " + allTasks.length +
+    (running.length ? " · " + running.length + " 个进行中" : " · 全部结束");
+}
+
+var lastListSig = "";
+
+function updateFilterCounts() {
+  var counts = {all: allTasks.length, running: 0, failed: 0, success: 0};
+  allTasks.forEach(function (t) {
+    if (t.status === "running") counts.running++;
+    if (t.result_status === "failed") counts.failed++;
+    if (t.result_status === "success") counts.success++;
+  });
+  var labels = {all: "全部", running: "进行中", failed: "失败", success: "成功"};
+  document.querySelectorAll("#task-filter button").forEach(function (b) {
+    var f = b.getAttribute("data-f");
+    b.textContent = labels[f] + " " + (counts[f] || 0);
+    b.classList.toggle("on", f === taskFilter);
+  });
+}
+
+function renderTaskList() {
+  var el = $("task-list");
+  var selKeyNow = viewTaskKey || taskKey(latestTask());
+  var listSig = taskFilter + "|sel=" + selKeyNow + "|" + allTasks.map(function (t) {
+    return [taskKey(t), t.status, t.result_status || "", t.unverified ? 1 : 0,
+            (t.evidence_counts || {}).compile || 0].join(":");
+  }).join(";");
+  if (listSig === lastListSig) {
+    /* 只更新选中态，不重建 DOM（点击不会被 1s 轮询吞掉） */
+    Array.prototype.forEach.call(el.querySelectorAll(".titem"), function (n) {
+      n.classList.toggle("sel", n.getAttribute("data-key") === selKeyNow);
+    });
+    updateFilterCounts();
+    return;
+  }
+  lastListSig = listSig;
+  var shown = allTasks.filter(function (t) {
+    if (taskFilter === "running") return t.status === "running";
+    if (taskFilter === "failed") return t.result_status === "failed";
+    if (taskFilter === "success") return t.result_status === "success";
+    return true;
+  });
+  updateFilterCounts();
+  if (!shown.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--faint);padding:6px 10px">' +
+      (allTasks.length ? "该筛选下暂无任务" : "暂无任务") + "</div>";
+    return;
+  }
+  el.innerHTML = shown.map(function (t) {
+    var sel = taskKey(t) === selKeyNow;
+    var cnt = t.evidence_counts || {};
+    var ev = [];
+    if (cnt.compile) ev.push("编" + cnt.compile);
+    if (cnt.apply) ev.push("写" + cnt.apply);
+    if (cnt.shot) ev.push("图" + cnt.shot);
+    // 标题用「用户口语需求」优先（user_request），agent 的术语 goal 只作兜底
+    var raw = String(t.user_request || t.goal || "");
+    var shortTitle = raw.length > 40 ? raw.slice(0, 40) + "…" : raw;
+    return '<div class="titem' + (sel ? " sel" : "") + '" data-id="' + esc(t.task_id) +
+      '" data-key="' + esc(taskKey(t)) + '" title="' + esc(raw) + '">' +
+      '<div class="t-goal">' + esc(shortTitle) + "</div>" +
+      '<div class="t-meta"><span class="dot ' + esc(t.status === "running" ? "running" : t.result_status) +
+      '"></span>' + esc(STATUS_CN[t.result_status || t.status] || "") + " · " +
+      esc(fmtTime(t.started_at)) + (ev.length ? " · " + esc(ev.join("/")) : "") +
+      (t.unverified ? '<span class="uv">未验证</span>' : "") +
+      "</div></div>";
+  }).join("");
+}
+
+/* 任务点击：容器事件委托 —— 列表重建不会丢失监听，也不会吞掉点击 */
+$("task-list").addEventListener("click", function (e) {
+  var item = e.target.closest ? e.target.closest(".titem") : null;
+  if (!item) return;
+  viewTaskKey = item.getAttribute("data-key");
+  viewTaskId = item.getAttribute("data-id");
+  followLatest = viewTaskKey === taskKey(latestTask());
+  renderDossier(findTaskByKey(viewTaskKey));
+  renderTaskList();
+});
+function bindTaskFilter() {
+  document.querySelectorAll("#task-filter button").forEach(function (b) {
+    b.addEventListener("click", function () {
+      taskFilter = b.getAttribute("data-f");
+      renderTaskList();
+    });
+  });
+}
+
+var STATUS_CN = {running: "进行中", success: "成功", failed: "失败", aborted: "中止",
+                 finished: "已结束"};
+
+/* ═══ 档案渲染 ═══ */
+var lastDossierSig = "";
+
+/* 数据签名（T-20261027-AUDIT）：只有内容真变了才重建 DOM ——
+   否则 1s 轮询会把用户展开的命令流水 <details> 每秒收起一次。 */
+function dossierSig(t) {
+  var steps = t.steps || [];
+  var parts = [t.task_id, t.status, t.result_status || "", t.unverified ? 1 : 0,
+               (t.deliverables || []).length, t.how_to_verify ? 1 : 0,
+               (t.commands || []).length,
+               (t.rollbacks || []).length,
+               (t.receipts || []).length,
+               undoState ? (undoState.agent_undoable || 0) : -1];
+  steps.forEach(function (s) {
+    parts.push([s.status, (s.log || []).length, (s.commands || []).length,
+                Object.keys(s.evidence || {}).length].join(":"));
+  });
+  return parts.join("|");
+}
+
+function taskMetaText(t) {
+  return t.task_id + " · 开工 " + fmtTime(t.started_at) +
+    (t.status === "running" ? " · 已进行 " + fmtDur(clientElapsed(t.started_at)) :
+     " · 耗时 " + fmtDur(t.duration_s));
+}
+
+function renderDossier(t) {
+  var empty = $("dossier-empty"), body = $("dossier-body");
+  if (!t) { empty.style.display = ""; body.style.display = "none"; return; }
+  empty.style.display = "none"; body.style.display = "";
+  viewTaskId = t.task_id;
+  viewTaskKey = taskKey(t);
+
+  var sig = dossierSig(t);
+  if (sig === lastDossierSig) {
+    $("dossier-meta").textContent = taskMetaText(t);   // 只刷新计时
+    return;
+  }
+  lastDossierSig = sig;
+
+  var steps = t.steps || [];
+  var doneN = steps.filter(function (s) { return s.status === "done"; }).length;
+  var isFinished = t.status === "finished";
+
+  var badge = $("dossier-status");
+  badge.textContent = STATUS_CN[t.result_status || t.status] || t.status;
+  badge.className = "badge " + (t.status === "running" ? "running" : t.result_status);
+  $("dossier-meta").textContent = taskMetaText(t);
+  $("dossier-goal").textContent = "「" + t.goal + "」";
+
+  /* 未验证徽章（证据计数已在阶段轨道"3 类证据"里，头部不再重复 —— v4.3 瘦身） */
+  var cnt = t.evidence_counts || {};
+  $("dossier-verify").innerHTML = (t.unverified
+    ? '<span class="unverified">未验证</span>' : "") + renderUndoChip(t);
+
+  /* 进度：finished 且步骤已封口 → 100%；否则按 done 计 */
+  var pct = steps.length ? Math.round(doneN * 100 / steps.length) : 0;
+  if (isFinished && steps.length && doneN === steps.length) pct = 100;
+  $("tprogress-fill").style.width = pct + "%";
+  $("hero-steps-label").textContent = steps.length
+    ? ("步骤 " + doneN + " / " + steps.length + " · " + pct + "%" +
+       (isFinished ? " · 已收尾" : ""))
+    : (isFinished ? "（无计划步骤）" : "");
+
+  /* ① 原话 vs 理解 */
+  $("dossier-request").textContent = t.user_request ||
+    "（本次未提供原话 —— 建议 agent 在 task_begin 传 user_request）";
+  $("dossier-req").innerHTML = renderChecklist(t.understanding);
+
+  /* ② 实现逻辑 */
+  $("dossier-approach").innerHTML = renderFlow(t.approach);
+
+  /* ③ 执行脉络 */
+  $("dossier-steps").innerHTML = renderSteps(steps, t);
+  $("panel-dossier").classList.toggle(
+    "empty", !(t.user_request || (t.understanding || []).length));
+  $("sec-approach").classList.toggle(
+    "empty", !(t.approach || steps.length));
+  $("sec-exec").classList.toggle("empty", !steps.length);
+
+  /* ④ 交付物与验证 */
+  var delivers = t.deliverables || [];
+  var recs = t.receipts || [];
+  $("sec-deliver").style.display = (delivers.length || t.how_to_verify || recs.length)
+    ? "" : "none";
+  $("deliver-list").innerHTML = renderDeliverables(delivers, t) +
+    renderReceipts(t) + renderAutoSave(t);
+  $("verify-steps").innerHTML = renderVerify(t);
+
+  /* ⑤ 复盘 */
+  var retroOn = isFinished || t.result_status;
+  $("sec-retro").style.display = retroOn ? "" : "none";
+  if (retroOn) $("dossier-retro").innerHTML = renderRetro(t);
+
+  /* 阶段轨道状态 */
+  var stageState = {
+    req: t.understanding ? "done" : "cur",
+    logic: t.approach ? "done" : (t.understanding ? "cur" : ""),
+    exec: steps.length ? (isFinished ? "done" : "cur") : "",
+    deliver: (delivers.length || t.how_to_verify) ? "done" : "",
+    retro: isFinished ? "done" : ""
+  };
+  Array.prototype.forEach.call(stageEls, function (el) {
+    var k = el.getAttribute("data-stage");
+    el.classList.remove("done", "cur");
+    if (stageState[k]) el.classList.add(stageState[k]);
+  });
+  $("stage-req-d").textContent = t.user_request ? "原话已捕获" : "待原话";
+  $("stage-logic-d").textContent = (t.steps || []).length
+    ? (t.steps.length + " 步计划") : "待计划";
+  $("stage-exec-d").textContent = doneN + "/" + steps.length + " 步 · " +
+    Object.keys(cnt).length + " 类证据";
+  $("stage-deliver-d").textContent = delivers.length
+    ? (delivers.length + " 项交付物") : "待汇总";
+  $("stage-retro-d").textContent = isFinished
+    ? (STATUS_CN[t.result_status] || "已结束") : "待收尾";
+}
+
+function renderChecklist(text) {
+  if (!text) return '<div class="no-data">（未填写：agent 应在此回显与用户对齐的要点）</div>';
+  var lines = String(text).split(/\n|；|;/).map(function (s) { return s.trim(); })
+    .filter(function (s) { return s; });
+  if (!lines.length) return "";
+  return '<div class="chk-list">' + lines.map(function (s) {
+    return '<div class="chk"><div class="ck">✓</div><div class="tx">' +
+      esc(s.replace(/^[-•·\d.)\s]+/, "")) + "</div></div>";
+  }).join("") + "</div>";
+}
+
+function renderFlow(text) {
+  if (!text) return '<div class="no-data">（未填写：agent 应在此给出操作逻辑）</div>';
+  var parts = String(text).split(/\s*(?:→|->|=>)\s*/).map(function (s) {
+    return s.trim(); }).filter(function (s) { return s; });
+  if (parts.length < 2) return '<div class="flow-plain">' + esc(text) + "</div>";
+  
+  var html = '<div class="flow">';
+  parts.forEach(function (p, i) {
+    html += '<div class="flow-node"><span class="fi">' +
+      String(i + 1 < 10 ? "0" + (i + 1) : i + 1) +
+      "</span>" + esc(p) + "</div>";
+    if (i < parts.length - 1) html += '<span class="flow-arrow">→</span>';
+  });
+  return html + "</div>";
+}
+
+/* 步骤 + 命令流水 */
+var STEP_CLS = {pending: "", running: "cur", done: "done", failed: "failed", skipped: "done"};
+
+function renderSteps(steps, task) {
+  if (!steps.length) {
+    var cmds = (task && task.commands) || [];
+    if (cmds.length) return '<div class="no-data">（未声明计划步骤）</div>' + renderCommands(cmds);
+    return '<div class="no-data">（未声明计划步骤）</div>';
+  }
+  return steps.map(function (s, i) {
+    var ev = s.evidence || {};
+    var pair = ev.pair || null;
+    var shots = ev.screenshots || [];
+    var evidenceHtml = "";
+    if (pair && (pair.before || pair.after)) {
+      evidenceHtml = '<div class="pair">' +
+        (pair.caption ? '<div class="cap">' + esc(pair.caption) + "</div>" : "") +
+        (pair.before ? figureHtml(pair.before, "改前", "a") : "") +
+        (pair.after ? figureHtml(pair.after, "改后", "b") : "") + "</div>";
+    } else if (shots.length) {
+      evidenceHtml = '<div class="evb">📷 ' + shots.map(function (p) {
+        return '<a href="' + shotUrl(basename(p)) + '" target="_blank">' +
+               esc(basename(p)) + "</a>"; }).join(" · ") + "</div>";
+    }
+    var log = (s.log || []).filter(function (l) {
+      return !/^（.*）$/.test(l.note || "");
+    });
+    var logHtml = log.length ? '<div class="slog">' + log.map(function (l) {
+      return '<div class="sl ' + esc(l.status) + '"><span class="st">' +
+        esc((l.ts || "").slice(11, 16)) + '</span><span>' + esc(l.note) + "</span></div>";
+    }).join("") + "</div>" : "";
+    var evBits = [];
+    if (ev.errors) evBits.push("错误 " + ev.errors);
+    if (s.auto_closed) evBits.push("自动收尾");
+    var icoTxt = {pending: (i + 1), running: "▶", done: "✓", failed: "✗",
+                  skipped: "—"}[s.status] || (i + 1);
+    return '<div class="step ' + (STEP_CLS[s.status] || "") + '">' +
+      '<div class="step-top"><div class="ico">' + icoTxt + "</div>" +
+      '<div class="bd"><div class="nm"><span class="tag">STEP ' + (i + 1) + "</span>" +
+        esc(s.name) +
+        (evBits.length ? ' <span class="hint">' + evBits.join(" · ") + "</span>" : "") +
+        "</div>" +
+        (s.note ? '<div class="note">' + esc(s.note) + "</div>" : "") +
+        (s.hint ? '<div class="hint">' + esc(s.hint) + "</div>" : "") +
+        logHtml + "</div></div>" +
+      renderCommands(s.commands) + evidenceHtml + "</div>";
+  }).join("");
+}
+
+/* 命令流水：下发什么命令 / 参数 / UE 返回 / UE 内动作 */
+function renderCommands(cmds) {
+  if (!cmds || !cmds.length) return "";
+  var rows = cmds.map(function (c) {
+    var p = c.params || {}, r = c.result || {};
+    var argBits = [];
+    Object.keys(p).forEach(function (k) {
+      var v = p[k];
+      if (v === true) v = "true";
+      if (v === false) v = "false";
+      argBits.push(k + "=" + v);
+    });
+    var resBits = [];
+    if (r.verified !== undefined) resBits.push(r.verified ? "<b>verified ✓</b>" : "<i>verified ✗</i>");
+    if (r.compiled !== undefined) resBits.push(r.compiled ? "<b>compiled ✓</b>" : "<i>compiled ✗</i>");
+    if (r.compile_status) resBits.push(String(r.compile_status));
+    if (r.nodes_applied !== undefined) resBits.push("节点 " + r.nodes_applied);
+    if (r.edges_applied !== undefined) resBits.push("连线 " + r.edges_applied);
+    if (r.errors) resBits.push('<i>错误 ' + r.errors + "</i>");
+    if (r.width && r.height) resBits.push(r.width + "×" + r.height);
+    if (r.error) resBits.push("<i>" + esc(String(r.error)) + "</i>");
+    if (r.first_error) resBits.push(esc(String(r.first_error)));
+    if (r.success !== undefined) resBits.push(r.success ? "ok" : "fail");
+    return '<div class="cmd">' +
+      '<div class="cmd-line"><span class="' + (c.ok ? "cmd-ok" : "cmd-bad") + '">' +
+        (c.ok ? "✓" : "✗") + '</span><span class="cmd-name">' + esc(c.tool) + "</span>" +
+        '<span class="cmd-ms">' + Math.round(c.ms || 0) + "ms</span>" +
+        (c.human ? '<span class="hint" style="font-size:11px;color:var(--faint)">' +
+          esc(c.human) + "</span>" : "") + "</div>" +
+      (argBits.length ? '<div class="cmd-args">参数：' + esc(argBits.join("  ")) + "</div>" : "") +
+      (resBits.length ? '<div class="cmd-res">返回：' + resBits.join(" · ") + "</div>" : "") +
+      (c.ue_action ? '<div class="cmd-ue">UE 内动作：' + esc(c.ue_action) + "</div>" : "") +
+      "</div>";
+  }).join("");
+  return '<details class="cmdflow"' + (cmds.length <= 3 ? " open" : "") + '>' +
+    "<summary>⌘ 命令流水 " + cmds.length + " 条（下发 → 返回 → UE 动作）</summary>" +
+    rows + "</details>";
+}
+
+function figureHtml(file, label, cls) {
+  return '<figure><img src="' + shotUrl(basename(file)) +
+    '" data-cap="' + esc(label + " · " + basename(file)) +
+    '" alt="' + esc(label) + '" loading="lazy">' +
+    '<figcaption><i class="' + cls + '">' + esc(label) + "</i>" +
+    "<span>" + esc(basename(file)) + "</span></figcaption></figure>";
+}
+
+/* 交付物清单：在项目里做了什么、在哪 */
+var ACTION_CN = {created: "新建", modified: "修改", evidence: "证据", verified: "验证"};
+/* 保存闭环状态（T-20261027-SAVE）：改完有没有存 = 会不会白干 */
+function renderReceipts(t) {
+  var rs = t.receipts || [];
+  if (!rs.length) return "";
+  var rows = rs.slice(-12).reverse().map(function (r) {
+    var b = r.before || {}, a = r.after || {};
+    var short = function (x) { return x ? String(x).slice(0, 8) : "—"; };
+    var ok = (r.verified !== false) && r.success;
+    return '<div class="rcpt"><span class="rc-badge ' + (ok ? "ok" : "bad") + '">' +
+      (ok ? "通过" : "失败") + "</span>" +
+      '<span class="rc-cmd">' + esc(r.command) + "</span>" +
+      '<span class="rc-asset">' + esc(String(r.asset || "").split("/").pop()) + "</span>" +
+      '<span class="rc-hash">' + (b.exists ? short(b.sha1) : "new") + " → " +
+      (a.exists ? short(a.sha1) : "gone") + "</span>" +
+      '<span class="rc-ts">' + esc(String(r.ts || "").slice(11)) + "</span></div>";
+  }).join("");
+  return '<div class="rcpt-wrap"><div class="sec-mini">变更回执（before → after 指纹）</div>' +
+    rows + "</div>";
+}
+
+function renderAutoSave(t) {
+  var as = t.auto_save;
+  if (!as) return "";
+  var box = function (bg, bd, color, title, body) {
+    return '<div class="verify-box" style="background:' + bg + ";border-color:" + bd +
+      ';margin-bottom:10px"><div class="vb-title" style="color:' + color + '">' +
+      title + "</div>" + body + "</div>";
+  };
+  if (as.error) {
+    return box("var(--err-soft)", "#fecaca", "var(--err)", "保存检查失败",
+               "无法确认改动是否已保存：" + esc(as.error));
+  }
+  if (as.skipped_all) {
+    return box("var(--warn-soft)", "#fde68a", "var(--warn)", "自动保存已关闭",
+               (as.assets || []).length + " 个资产未被保存 —— 请手动 Ctrl+S");
+  }
+  var failed = as.failed || [];
+  if (failed.length) {
+    return box("var(--err-soft)", "#fecaca", "var(--err)", "保存失败",
+               failed.length + " 个资产保存失败，改动可能丢失：<br><code>" +
+               failed.map(esc).join("<br>") + "</code>");
+  }
+  var saved = as.saved || [];
+  if (saved.length) {
+    return box("var(--ok-soft)", "#a7f3d0", "#047857", "已自动保存",
+               saved.length + " 个资产：" + saved.map(function (p) {
+                 return esc(String(p).split("/").pop()); }).join("、"));
+  }
+  return box("var(--panel2)", "var(--line)", "var(--dim)", "保存状态",
+             "无需保存（资产已是最新）");
+}
+
+function renderDeliverables(items, t) {
+  if (!items || !items.length) {
+    return '<div class="no-deliver">（未记录交付物 —— agent 可在 task_end 填 deliverables）</div>';
+  }
+  var rows = items.map(function (d) {
+    var act = ACTION_CN[d.action] || d.action || "修改";
+    var cls = "tag-" + (["created", "modified", "evidence", "verified"].indexOf(d.action) >= 0
+      ? d.action : "modified");
+    var p = String(d.path || "");
+    var isShot = /\.(png|jpe?g)$/i.test(p);
+    var shown = isShot ? p.split(/[\/]/).pop() : p;
+    return "<tr><td><span class='dtag " + cls + "'>" + esc(act) + "</span></td>" +
+      "<td class='dpath'>" + esc(shown) + "</td>" +
+      "<td class='dnote'>" + esc(d.note || "") + "</td></tr>";
+  }).join("");
+  return (t.deliverables_inferred
+      ? '<div class="inferred-note">⚙ 以下清单由命令流水自动汇总（agent 未显式提供）</div>'
+      : "") +
+    "<table class='deliver-table'><thead><tr><th>类型</th><th>路径 / 文件</th>" +
+    "<th>改了什么 · 为什么 · 怎么确认</th></tr></thead><tbody>" + rows + "</tbody></table>";
+}
+
+/* 如何验证：agent 给的步骤优先；否则给通用三步（基于真实证据） */
+function renderVerify(t) {
+  if (t.how_to_verify) {
+    var lines = String(t.how_to_verify).split(String.fromCharCode(10)).map(function (x) { return x.trim(); })
+      .filter(function (x) { return x; });
+    return '<div class="verify-box"><div class="vb-title">如何验证</div><ol>' +
+      lines.map(function (x) { return "<li>" + esc(x.replace(/^\d+[.)]\s*/, "")) + "</li>"; })
+        .join("") + "</ol></div>";
+  }
+  var cnt = t.evidence_counts || {};
+  if (!t.status || t.status === "running") return "";
+  var steps = [];
+  var assets = (t.deliverables || []).filter(function (d) {
+    return d.kind === "蓝图资产"; });
+  if (assets.length) {
+    steps.push("在 UE 内容浏览器打开 " + assets[0].path +
+               "，看图内节点与连线是否为预期逻辑");
+  }
+  if (cnt.compile) steps.push("双击该蓝图 Compile，确认无编译错误（本轮已检出 " +
+                              cnt.compile + " 次编译诊断记录）");
+  var shots = (t.deliverables || []).filter(function (d) { return d.kind === "截图"; });
+  if (shots.length) steps.push("对照本轮截图（" + shots.length +
+                               " 张，见步骤证据/交付物清单）确认编辑器画面");
+  if (!steps.length) steps.push("按「执行脉络」中的步骤逐条核对命令返回（verified/compiled）");
+  return '<div class="verify-box"><div class="vb-title">如何验证（自动生成）</div><ol>' +
+    steps.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ol></div>";
+}
+
+/* 任务级撤销徽章（T-20261027-TASK-UNDO）：只显示状态，不在面板上执行写操作
+   （面板仍是只读观测面；回滚对 AI 说一句「回滚这个任务的最近 N 步」即可）。 */
+function renderUndoChip(t) {
+  var u = undoState;
+  if (!u) return "";
+  var n = parseInt(u.agent_undoable || 0, 10) || 0;
+  var rolled = (t.rollbacks || []).reduce(function (a, r) {
+    return a + (parseInt(r.undone || 0, 10) || 0);
+  }, 0);
+  var out = [];
+  if (n > 0) {
+    var tip = "下一步：" + (u.next_title || "agent 编辑") +
+      "。回滚：对 AI 说「回滚这个任务的最近 " + n + " 步」" +
+      "（命令 agent_undo；遇到你的操作会自动停）";
+    out.push('<span class="undo-chip" title="' + esc(tip) + '">可回滚 ' +
+      n + " 步</span>");
+  } else if (u.ok === false) {
+    out.push('<span class="undo-chip done" title="' + esc(u.error || "") +
+      '">撤销不可用</span>');
+  }
+  if (rolled > 0) {
+    out.push('<span class="undo-chip done">已回滚 ' + rolled + " 步</span>");
+  }
+  return out.join(" ");
+}
+
+function renderRetro(t) {
+  var steps = t.steps || [];
+  var doneN = steps.filter(function (s) { return s.status === "done"; }).length;
+  var fails = t.failed_steps || [];
+  var bad = t.result_status !== "success";
+  var rollbacks = t.rollbacks || [];
+  var rolled = rollbacks.reduce(function (a, r) {
+    return a + (parseInt(r.undone || 0, 10) || 0);
+  }, 0);
+  return '<div class="tiles">' +
+    '<div class="tile"><b>' + fmtDur(t.duration_s) + "</b><span>总耗时</span></div>" +
+    '<div class="tile"><b>' + doneN + " / " + steps.length + "</b><span>步骤完成</span></div>" +
+    '<div class="tile' + (fails.length ? " bad" : "") + '"><b>' + fails.length +
+    "</b><span>失败步骤</span></div></div>" +
+    '<div class="retro' + (bad ? " bad" : "") + '">' +
+    '<div class="rt-head"><span>' + "</span>结论：" +
+    esc(STATUS_CN[t.result_status] || t.result_status || "未收尾") + "</div>" +
+    '<div class="rt-body">' +
+    (t.summary ? '<div class="summary">' + esc(t.summary) + "</div>" : "") +
+    (t.lessons ? '<div class="lessons">' + esc(t.lessons) + "</div>" : "") +
+    (rolled > 0
+      ? '<div class="rollback-note">本任务已回滚 ' + rolled + " 步" +
+        (rollbacks[rollbacks.length - 1].stopped_reason
+          ? "（" + esc(rollbacks[rollbacks.length - 1].stopped_reason) + "）"
+          : "") + "</div>"
+      : "") +
+    (t.unverified
+      ? '<div class="lessons" style="background:#fef2f2;border-color:#fecaca;color:#7f1d1d">' +
+        "本任务声明成功但未检测到验证证据（无编译诊断/整图写入记录）——结论仅为 agent 自述，请人工复核</div>"
+      : "") +
+    "</div></div>";
+}
+
+function clientElapsed(startIso) {
+  var t0 = Date.parse(startIso);
+  return isNaN(t0) ? null : (Date.now() - t0) / 1000;
+}
+
+/* ═══ 灯箱 ═══ */
+document.addEventListener("click", function (e) {
+  var img = e.target.closest ? e.target.closest(".pair img") : null;
+  if (!img) return;
+  $("lightbox-img").src = img.src;
+  $("lightbox-cap").textContent = img.getAttribute("data-cap") || "";
+  $("lightbox").classList.add("on");
+});
+$("lightbox").addEventListener("click", function () { this.classList.remove("on"); });
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape") $("lightbox").classList.remove("on");
+});
+
+/* ═══ 运行状况 ═══ */
+function pollDebug() {
+  api("/health").then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (h) {
+      if (!h) return;
+      var info = h.ue_info || {};
+      var eng = String(info.engine_version || "—");
+      var m = eng.match(/^(\d+\.\d+(\.\d+)?)/);
+      $("dbg-engine").textContent = m ? m[1] : eng.slice(0, 14);
+      var pn = String(info.project_name || "—");
+      $("dbg-project").textContent = (pn === "unknown") ? "—" : pn;
+      var up = h.uptime_seconds || 0;
+      $("dbg-uptime").textContent = up > 3600
+        ? Math.floor(up / 3600) + "h" + Math.round(up % 3600 / 60) + "m"
+        : Math.round(up / 60) + "m";
+      $("dbg-calls").textContent = h.request_count || 0;
+      renderTaskMetrics();
+      var bu = $("dbg-bridge-url");
+      if (bu) bu.textContent = "http://" + location.host;  // 真实端口，勿硬编码
+    }).catch(function () { $("call-summary").textContent = "桥未连接"; });
+  api("/ui/api/stats").then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d) return;
+      var top = (d.by_tool || []).filter(function (r) {
+        return r.key.indexOf("/") !== 0; }).slice(0, 3).map(function (r) {
+        return esc(r.key) + " " + r.calls + " 次"; }).join("、");
+      $("call-summary").innerHTML = "本次 bridge 进程内 agent 共调用工具 <b>" + d.total_calls +
+        "</b> 次" + (top ? "，最常用的是 " + top : "") + "。" +
+        (d.total_errors ? "其中 <b style='color:var(--err)'>" + d.total_errors +
+          " 次失败</b>（明细见下）。" : "本次进程内没有失败调用。"
+          + '<span style="color:var(--faint);font-size:11px">（进程重启即清零；任务级结果看上方「任务结果」）</span>');
+    }).catch(function () {});
+  loadLocks();
+  loadScenarios();
+  pollEvents(); renderErrors();
+}
+
+function loadLocks() {
+  api("/ui/api/task").then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      var el = $("lock-list");
+      if (!el) return;
+      var locks = (d && d.locks) || [];
+      if (!locks.length) {
+        el.innerHTML = '<div class="ok-pill">当前没有资产锁</div>';
+        return;
+      }
+      el.innerHTML = locks.map(function (x) {
+        return '<div class="sc-row"><span class="sc-badge ok">锁定</span>' +
+          '<span class="sc-name">' + esc(String(x.asset).split("/").pop()) +
+          "</span><span class=\"sc-meta\">" + esc(x.owner) + " · " +
+          x.expires_in + "s</span></div>";
+      }).join("");
+    }).catch(function () {});
+}
+
+function loadScenarios() {
+  api("/ui/api/scenarios").then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      var el = $("scenario-list");
+      if (!el) return;
+      var items = (d && d.items) || [];
+      if (!items.length) {
+        el.innerHTML = '<div class="ok-pill">还没有场景记录 —— 调 verify_scenario 跑一条</div>';
+        return;
+      }
+      el.innerHTML = items.map(function (x) {
+        var ok = !x.failures;
+        return '<div class="sc-row"><span class="sc-badge ' + (ok ? "ok" : "bad") + '">' +
+          (ok ? "通过" : "失败") + "</span>" +
+          '<span class="sc-name">' + esc(String(x.name).replace(/^ue5\.scenario\./, "")) + "</span>" +
+          '<span class="sc-meta">' + x.tests + " 步 · " + esc(fmtTime(x.mtime_iso)) +
+          "</span></div>";
+      }).join("");
+    }).catch(function () {});
+}
+var eventCursor = 0, errEvents = [];
+function pollEvents() {
+  if (curView !== "debug") return;
+  api("/ui/api/events?since=" + eventCursor + "&limit=200")
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d) return;
+      var evs = d.events || [];
+      if (evs.length) eventCursor = evs[evs.length - 1].id;
+      var errs = evs.filter(function (e) { return e.error; });
+      if (errs.length) { errEvents = errs.concat(errEvents).slice(0, 20); renderErrors(); }
+      var el = $("event-list");
+      el.innerHTML = evs.map(function (e) {
+        return '<div class="erow"><span class="t">' + esc(e.ts.slice(11, 19)) +
+          "</span><span>" + esc((e.tool_name || e.route) + (e.error ? " · error" : "") +
+          " " + e.status + " " + e.latency_ms + "ms") + "</span></div>";
+      }).join("") + el.innerHTML;
+      while (el.children.length > 300) el.removeChild(el.firstChild);
+    }).catch(function () {});
+}
+/* 任务维度统计（T-20261026-FIX）：来自持久化任务日志，不看进程内事件。
+   用户发现的矛盾：任务列表有失败，运行状况却显示全部成功 —— 因为旧实现
+   只统计 HTTP 事件（进程内存、重启清零），完全不看任务的 result_status。 */
+function renderTaskMetrics() {
+  var total = allTasks.length;
+  var ok = allTasks.filter(function (t) { return t.result_status === "success"; }).length;
+  var fail = allTasks.filter(function (t) { return t.result_status === "failed"; }).length;
+  var run = allTasks.filter(function (t) { return t.status === "running"; }).length;
+  $("dbg-task-total").textContent = total;
+  $("dbg-task-ok").textContent = ok;
+  $("dbg-task-fail").textContent = fail;
+  $("dbg-task-run").textContent = run;
+  var failed = allTasks.filter(function (t) { return t.result_status === "failed"; });
+  var box = $("failed-tasks");
+  if (!failed.length) {
+    box.innerHTML = '<div class="ok-pill">✓ 没有失败的任务</div>';
+    return;
+  }
+  box.innerHTML = '<div class="sec-mini">失败的任务（点任务板可查看详情）</div>' +
+    '<div class="err-list">' + failed.slice(0, 6).map(function (t) {
+      var reason = t.summary || "";
+      if (!reason) {
+        var bad = (t.steps || []).filter(function (s) { return s.status === "failed"; });
+        reason = bad.length ? ("失败步骤：" + bad.map(function (s) { return s.name; }).join("、"))
+                            : "未记录失败原因";
+      }
+      return '<div class="err-row"><span class="et">' + esc(fmtTime(t.ended_at || t.started_at)) +
+        "</span><span><b>" + esc(String(t.user_request || t.goal || "").slice(0, 40)) +
+        "</b><br>" + esc(String(reason).slice(0, 120)) + "</span></div>";
+    }).join("") + "</div>";
+}
+
+function renderErrors() {
+  var rows = [];
+  allTasks.forEach(function (t) {
+    (t.notes || []).forEach(function (n) { if (n.error) rows.push({ts: n.ts, text: n.note}); });
+    (t.steps || []).forEach(function (s) {
+      (s.log || []).forEach(function (l) {
+        if (l.status === "failed") rows.push({ts: l.ts, text: "「" + s.name + "」失败：" + l.note});
+      });
+    });
+    if (t.result_status === "failed" && !(t.notes || []).some(function (n) { return n.error; })) {
+      var bad = (t.steps || []).filter(function (s) { return s.status === "failed"; });
+      rows.push({ts: t.ended_at || t.started_at,
+                 text: "任务失败：" + String(t.user_request || t.goal || "").slice(0, 30) +
+                       (bad.length ? "（" + bad.map(function (s) { return s.name; }).join("、") + "）" : "")});
+    }
+  });
+  errEvents.forEach(function (e) {
+    rows.push({ts: e.ts, text: (e.tool_name || e.route) + " 请求失败（HTTP " + e.status + "）"});
+  });
+  rows.sort(function (a, b) { return String(b.ts).localeCompare(String(a.ts)); });
+  var el = $("recent-errors");
+  if (!rows.length) {
+    el.innerHTML = '<div class="ok-pill">✓ 没有技术层错误记录（任务级失败见上方「失败的任务」）</div>';
+    return;
+  }
+  el.innerHTML = '<div class="err-list">' + rows.slice(0, 6).map(function (r) {
+    return '<div class="err-row"><span class="et">' + esc(fmtTime(r.ts)) +
+      "</span><span>" + esc(r.text) + "</span></div>";
+  }).join("") + "</div>";
+}
+setInterval(function () { if (curView === "debug") pollDebug(); }, 4000);
+
+/* 1s 轮询（用户要求"实时推送"的等效实现；单机开销可忽略） */
+bindTaskFilter();
+pollTask(); setInterval(pollTask, 1000);
+</script>
+</body>
+</html>

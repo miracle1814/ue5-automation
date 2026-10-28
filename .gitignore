@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# runtime artifacts (never commit)
+logs/
+output/
+*.log
+diagnosis_result.json
+analyzer_result.json
+
+# build intermediates / debug
+*.pdb
+*.bak*
+Intermediate/
+Binaries/Win64/*.bak*
+Binaries/Win64/UnrealEditor-BlueprintPythonBridge.pdb
+# UAT BuildPlugin staging（本地产物，不入库）
+bridge/BlueprintPythonBridge/Out/
+bridge/BlueprintPythonBridge/Config/
+
+# local editor state
+Saved/
+DerivedDataCache/
+.vs/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 私有存档（作者明确标注不随公开仓库分发）
+skill/ue5-automation/docs/private/
+
+# release artifacts (upload as GitHub Release assets, not repo blobs)
+dist/*.zip
+dist/skillhub/
