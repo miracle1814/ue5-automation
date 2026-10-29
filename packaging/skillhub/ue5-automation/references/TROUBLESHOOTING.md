@@ -107,6 +107,48 @@
 - 用 `ue5_tool_search` 发现，或切 `core` / `full` 档后重启。
 - 能力边界看命令白名单，不是看 `tools/list` 长度。
 
+## 18. `search_blueprint_nodes` 搜不到 `PrintString` / `Delay`
+
+- 搜索对图内节点、蓝图自有函数/变量、流程/事件目录可靠；引擎函数库（如
+  `KismetSystemLibrary`）在当前 Python 包装里可能枚举不到。
+- `Query:"Print"` 还会命中 `Blueprint*`（子串包含 `print`），结果看起来不相关。
+- 搜不到不代表函数不存在：直接用完整类路径写 `apply_graph`，写后 `read_nodes`
+  看实际引脚。引擎函数用精确名 + 完整类路径最稳。
+
+## 19. 日志出现 `[Errno 10048]` 但 `/health` 正常
+
+- 说明有两个自启入口（bootstrap 插件 + 项目 `Content/Python/init_unreal.py`）；
+  第一个已经占用 8889，第二个绑定失败并打印 `service stopped`。
+- 服务本身可用：`health` 返回 `ok` 即正常。可忽略，或删掉重复的 init 入口。
+- 不要因为看到 `service stopped` 就重启编辑器；先看 `/health`。
+
+## 20. `verify_behavior` 的 bool 断言失败
+
+- `match:"exact"` 大小写敏感；UE 返回的 bool 字符串是小写 `false` / `true`。
+- 写 `"expected":"False"` 会失败；改成 `"false"`。
+- 字符串属性同理：按实际大小写断言，或改用 `match:"contains"`（忽略大小写）。
+
+## 21. 启动报 `ModuleNotFoundError: No module named 'pydantic'`
+
+- bridge 依赖 `fastapi` / `uvicorn` / `pydantic`，必须装在**引擎自带 Python**。
+- 不要用 `--user`；UE 内嵌 Python 可能不加载用户 site-packages。
+- 正确命令：
+
+```bat
+"<UE>\Engine\Binaries\ThirdParty\Python3\Win64\python.exe" -m pip install fastapi uvicorn pydantic
+```
+
+- 装完重启编辑器；日志应不再出现该 Traceback。
+
+## 22. 找不到 `install.bat`
+
+- v6.5.4 portable 包的安装脚本在 `tools\install.bat`，不在包根目录。
+- 也可以直接跑部署脚本：
+
+```bat
+"<UE>\Engine\Binaries\ThirdParty\Python3\Win64\python.exe" tools\deploy_portable.py --project "<项目>.uproject"
+```
+
 ## 仍然失败时
 
 收集以下信息再排查：
