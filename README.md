@@ -15,6 +15,8 @@ No compilation for 5.1 & 5.8 (prebuilt bridge DLLs included).
 
 **Download v6.5.4:** [portable package](https://github.com/miracle1814/ue5-automation/releases/download/v6.5.4/ue5-automation-v6.5.4-portable.zip) · [release notes](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.4) · [SkillHub listing](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
 
+> The SkillHub skill package is at **6.5.6** (docs-only; runtime remains **6.5.4**).
+
 > 🎬 **Demo GIF** — coming soon: a 60–120s capture of "one sentence → agent builds a
 > blueprint → PIE runtime verification" will be embedded here.
 
@@ -218,7 +220,7 @@ Every write is **read back and compared**; mismatches raise loud errors. We cons
 3. Build a smoke Blueprint, write `BeginPlay → PrintString` with `apply_graph`, compile it with `compile_and_diagnose`, and read the pin back with `get_pin_default_value`.
 4. Save the asset and confirm the result. That is the whole loop: **write → compile → read back → save**.
 
-Full command contract: [`SKILL.md`](skill/ue5-automation/SKILL.md); troubleshooting: [`references/TROUBLESHOOTING.md`](packaging/skillhub/ue5-automation/references/TROUBLESHOOTING.md).
+Full command contract: [`SKILL.md`](skill/ue5-automation/SKILL.md); SkillHub package: [`packaging/skillhub/ue5-automation`](packaging/skillhub/ue5-automation/SKILL.md); troubleshooting: [`TROUBLESHOOTING.md`](packaging/skillhub/ue5-automation/references/TROUBLESHOOTING.md); pitfalls: [`PITFALLS.md`](packaging/skillhub/ue5-automation/references/PITFALLS.md); examples: [`EXAMPLES.md`](packaging/skillhub/ue5-automation/references/EXAMPLES.md).
 
 ## Commercial / Enterprise
 
