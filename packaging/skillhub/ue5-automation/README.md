@@ -20,23 +20,28 @@
 
 | 项 | 版本 |
 |---|---|
-| Skill 包 | **6.5.8** |
+| Skill 包 | **6.5.9** |
 | 运行包（插件 + bridge） | **6.5.4** |
 | 适用引擎 | UE 5.1.x 开箱；5.8.x 预编译；5.2–5.7 需重编译 |
 
-> 6.5.8 是**文档正确性修订**，不改变运行时行为。安装、命令、安全模型
-> 与 6.5.4 完全一致；`VERIFICATION.md` 中的真机记录沿用 6.5.4。
+> 6.5.9 是**实机冒烟后的可用性修订**，不改变运行时行为。安装、命令、安全模型
+> 与 6.5.4 完全一致；`VERIFICATION.md` 新增 UE 5.1.1 实机记录。
 
-## 6.5.8 改了什么
+## 6.5.9 改了什么
 
-- 修正工具档位：gateway **12** / core **18** / full **34**；gateway 列表补上
-  `ue5_verify_behavior`。
-- 修正 `get_pin_default_value` / `set_pin_default_value` 示例缺少 `bp_path`。
-- 明确 `ue5_disconnect_pin` / `ue5_delete_node` 是 MCP 工具，不是白名单命令。
-- 6.5.7 的曝光改动保留：描述关键词、工作流总览图、新增标签、`dev-bug-fix` 分类。
-- 6.5.6 的元数据修正保留：本地 bridge token、`requires_api_key: false`。
-- 6.5.5 的结构改动保留：「何时不要用」、工具档位、PITFALLS、EXAMPLES、
-  命令目录不写死数量、安装文档与商务/法务分层、统一版本口径。
+- 按 UE 5.1.1 实机冒烟结果补充：`search_blueprint_nodes` 对图内/事件可靠，
+  但 `KismetSystemLibrary` 的 `PrintString` 可能搜不到；示例改为 `BeginPlay`，
+  并说明直接用完整类路径 + `read_nodes` 回读。
+- 写明 `read_blueprint` L2 返回结构：`result.l2.graphs[].nodes` / `.connections`。
+- 写明 `verify_behavior` 的 bool 用小写 `true` / `false`，`exact` 大小写敏感。
+- 写明 `task_begin` 要在动手前调用；否则 `task_end` 会因无证据标 `unverified`。
+- TROUBLESHOOTING 新增：10048 双自启、搜索限制、bool 断言。
+- 安装文档修正：v6.5.4 包的安装脚本在 `tools\install.bat`；引擎 Python 依赖
+  必须装到引擎 site-packages，不能用 `--user`。
+- VERIFICATION 新增 UE 5.1.1 实机冒烟记录（建图/编译/读回/保存/PIE 验证）。
+- 6.5.8 的档位与参数修正保留：gateway **12** / core **18** / full **34**、
+  gateway 补 `ue5_verify_behavior`、pin 示例补 `bp_path`、disconnect/delete 命名。
+- 6.5.7/6.5.6/6.5.5 的曝光与结构改动保留。
 
 ## 安装
 

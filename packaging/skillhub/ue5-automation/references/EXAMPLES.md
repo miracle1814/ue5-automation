@@ -16,6 +16,9 @@ L1 只返回类信息、变量、CDO，适合先判断“这是什么”。需�
 {"command":"read_blueprint","params":{"bp_path":"/Game/Blueprints/BP_Door","level":"L2"}}
 ```
 
+L2 结果在 `result.l2.graphs[]`，每个图有 `nodes[]` 和 `connections[]`；节点标题是
+本地化的（如 `打印字符串`），定位用 `guid`。
+
 大图不要一次全读：先用 L1 定位，再用 `read_nodes` / `get_node_by_guid` 按需读；
 `read_blueprint` 支持 `fields` 裁剪返回字段。
 
@@ -34,16 +37,19 @@ L1 只返回类信息、变量、CDO，适合先判断“这是什么”。需�
 确认 `success=true`。失败时不要用 `create_asset` 绕过（会得到不可用蓝图，见
 `PITFALLS.md` P01）。
 
-### 2.2 查节点签名
+### 2.2 查候选（可选）
 
 ```json
 {"command":"search_blueprint_nodes","params":{
   "bp_path":"/Game/Blueprints/BP_Door",
-  "query":"Print"
+  "query":"BeginPlay"
 }}
 ```
 
-拿到 `PrintString` 和它的引脚。不要凭记忆写引脚名。
+确认事件候选可用。`search_blueprint_nodes` 对图内节点、蓝图自有函数/变量、
+流程/事件目录可靠；引擎函数库（如 `KismetSystemLibrary`）在当前 Python 包装里
+可能枚举不到，`PrintString` 搜不到不代表不存在。直接写完整类路径，写后
+`read_nodes` 看实际引脚。
 
 ### 2.3 整图写入
 
@@ -167,6 +173,15 @@ L1 只返回类信息、变量、CDO，适合先判断“这是什么”。需�
 - 场景默认拒绝 `delete_asset` / `agent_undo` / `batch_asset_ops` /
   `apply_graph{replace}`；需要时显式 `allow_destructive=true`；
 - 复杂场景拆小，总超时默认 300s。
+
+单属性断言（bool 用小写；`match:"exact"` 大小写敏感）：
+
+```json
+{"command":"verify_behavior","params":{
+  "actor_name":"BP_Door_1","property_name":"bHidden",
+  "expected":"false","world":"pie","match":"exact","capture":false
+}}
+```
 
 ## 5. 用户说“撤回刚才的改动”
 

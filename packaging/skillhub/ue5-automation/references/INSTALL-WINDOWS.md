@@ -7,7 +7,7 @@
 
 | 项 | 版本 |
 |---|---|
-| 本 Skill 包 | 6.5.8 |
+| 本 Skill 包 | 6.5.9 |
 | 运行包 | 6.5.4 |
 | 适用引擎 | UE 5.1.x 开箱；5.8.x 预编译；5.2–5.7 需自行重编译 |
 
@@ -36,8 +36,15 @@ https://github.com/miracle1814/ue5-automation/releases/download/v6.5.4/ue5-autom
 解压 portable 包，运行：
 
 ```bat
-install.bat
+tools\install.bat
 ```
+
+> 包根目录没有 `install.bat`（v6.5.4 包里在 `tools\`）。如果系统没有
+> `py` / `python`，用引擎自带 Python 直接跑部署脚本：
+>
+> ```bat
+> "<UE>\Engine\Binaries\ThirdParty\Python3\Win64\python.exe" tools\deploy_portable.py --project "<项目>.uproject"
+> ```
 
 把 `.uproject` 拖进窗口。脚本会：
 
@@ -47,6 +54,18 @@ install.bat
 4. 安装宿主脚本到 `Content/Python`；
 5. 写自启入口；
 6. 跑环境自检，看到 `FAIL 0` 即成功。
+
+### 2.1 编辑器 Python 依赖
+
+bridge 需要 `fastapi` / `uvicorn` / `pydantic`。启动日志如果报
+`ModuleNotFoundError: No module named 'pydantic'`，用**引擎自带 Python** 安装：
+
+```bat
+"<UE>\Engine\Binaries\ThirdParty\Python3\Win64\python.exe" -m pip install fastapi uvicorn pydantic
+```
+
+**不要加 `--user`**：UE 内嵌 Python 可能不加载用户 site-packages，装到用户目录
+等于没装。装完重启编辑器。
 
 5.8 注意：项目自身 `Content/Python/init_unreal.py` 不再自动执行，自启挂在
 `Plugins/ue5-automation-extras/Content/Python/init_unreal.py`。`ue5_bridge.start()`

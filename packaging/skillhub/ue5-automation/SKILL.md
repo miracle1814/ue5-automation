@@ -2,7 +2,7 @@
 slug: ue5-automation
 name: ue5-automation
 displayName: UE5 蓝图自动化
-version: 6.5.8
+version: 6.5.9
 runtime_version: 6.5.4
 summary: 让 AI 直接读写 UE5 蓝图节点、做编译诊断与 PIE 行为验证；Windows + UE 5.1/5.8。
 description: UE5 蓝图自动化操作规范（ue_automation / UE 自动化 / Unreal 自动化 / 蓝图自动化）：面向虚幻引擎（Unreal Engine 5 / UE5）的 Blueprint Automation，先读后写、整图事务、读回验证、编译诊断、PIE 行为验证、任务级撤销与多 Agent 协作。适用于已安装 ue5-automation bridge/MCP 的 UE5 工程；不适用于 C++ 代码生成、打包发布或纯美术制作。Windows + UE 5.1/5.8。本地 bridge 使用本机 token，无需外部 API Key。
@@ -37,7 +37,7 @@ tags:
 - 失败时诚实报错，不把“命令返回 200”当成“蓝图已改对”；
 - 多 Agent 并发时用幂等键/资产锁避免互相踩踏。
 
-> **版本对应：** Skill 包 `6.5.8` ↔ 运行包 `6.5.4`。本次只更新文档，运行时不变。
+> **版本对应：** Skill 包 `6.5.9` ↔ 运行包 `6.5.4`。本次只更新文档，运行时不变。
 
 ![UE5 蓝图自动化工作流总览](https://skillhub-1388575217.cos.accelerate.myqcloud.com/skill-overview-images/uploads/805989/ffb2dc532a45458d889e5b720ae1b847.png)
 
@@ -88,13 +88,16 @@ Gameplay、蓝图自动化、UE 编辑器。
 
 确认返回 `success=true`。
 
-**Step 3 · 查节点签名**
+**Step 3 · 查候选（可选）**
 
 ```json
-{"command":"search_blueprint_nodes","params":{"bp_path":"/Game/Test/BP_Smoke","query":"Print"}}
+{"command":"search_blueprint_nodes","params":{"bp_path":"/Game/Test/BP_Smoke","query":"BeginPlay"}}
 ```
 
-确认能返回候选节点。
+确认能返回事件候选。`search_blueprint_nodes` 对图内节点、蓝图自有函数/变量、
+流程/事件目录可靠；引擎函数库（如 `KismetSystemLibrary`）在当前 Python 包装里
+可能枚举不到——`PrintString` 搜不到不代表不存在，直接写完整类路径，写后
+`read_nodes` 看实际引脚。
 
 **Step 4 · 写入 BeginPlay → PrintString**
 
@@ -209,7 +212,8 @@ Gameplay、蓝图自动化、UE 编辑器。
 ```
 
 - L1：类信息、变量、CDO；
-- L2：节点与连线；
+- L2：节点与连线；返回结构是 `result.l2.graphs[].nodes` / `.connections`；
+  节点标题是本地化的（如 `打印字符串`），定位用 `guid`；
 - `fields` 可裁剪返回字段，避免大图把上下文撑爆。
 
 写图前还要查可调用节点和引脚签名：
@@ -301,6 +305,7 @@ Gameplay、蓝图自动化、UE 编辑器。
 ```
 
 - `verified=true` 才是通过；截图失败只算证据失败，不翻转 `verified`；
+- `match:"exact"` 大小写敏感；bool 用小写 `true` / `false`（写 `"False"` 会判失败）；
 - 场景默认禁止 `delete_asset`、`agent_undo`、`batch_asset_ops`、`apply_graph{replace}`
   等高危命令；需要时显式 `allow_destructive=true`；
 - 总超时默认 300s，上限 1800s；
@@ -315,6 +320,7 @@ Gameplay、蓝图自动化、UE 编辑器。
 ```
 
 - 写命令会自动留一个可撤销的 UE 事务步；
+- `task_begin` 在动手前调用；写操作之后再开任务，收尾会因无证据标 `unverified`；
 - `agent_undo_status` 看可回滚步数，`agent_undo` 回滚最近 N 个 agent 步；
 - 回滚遇到用户操作会立即停，不会跳过用户改动；
 - 资产创建/删除**不在**撤销栈：回滚不会删新建蓝图，也不会恢复已删资产；
