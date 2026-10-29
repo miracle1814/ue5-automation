@@ -12,12 +12,21 @@
 > **版本 v6.5.4**（2026-10-28）· 101 条白名单命令 / 34 个 MCP 工具 · 离线 820 passed
 >
 > [![GitHub release](https://img.shields.io/github/v/release/miracle1814/ue5-automation?display_name=tag)](https://github.com/miracle1814/ue5-automation/releases/latest)
+> [![Tests](https://github.com/miracle1814/ue5-automation/actions/workflows/tests.yml/badge.svg)](https://github.com/miracle1814/ue5-automation/actions/workflows/tests.yml)
+> [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 > [![SkillHub](https://img.shields.io/badge/SkillHub-UE5%20Blueprint%20Automation-2ea44f)](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
 > [![miracle1814/ue5-automation MCP server](https://glama.ai/mcp/servers/miracle1814/ue5-automation/badges/score.svg)](https://glama.ai/mcp/servers/miracle1814/ue5-automation)
 >
 > **下载 v6.5.4：** [移植包](https://github.com/miracle1814/ue5-automation/releases/download/v6.5.4/ue5-automation-v6.5.4-portable.zip) · [Release 说明](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.4) · [SkillHub 页面](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
 >
 > English: [README.md](README.md) · 快速开始：[START-HERE.zh-CN.md](START-HERE.zh-CN.md)
+>
+> SkillHub 技能包已更新到 **6.5.7**（仅文档；运行时仍为 **v6.5.4**）。
+
+![UE5 蓝图自动化工作流总览](docs/assets/skillhub-overview.png)
+*读 → 写 → 编译 → 验证 → 收尾；`verified=true` 才算通过。*
+
+> ⭐ 如果这个工具帮你省了时间，欢迎点个 Star，让更多 UE 开发者找到它。
 
 ---
 

@@ -10,12 +10,19 @@ project (or your team's mobile line) is on 5.1–5.7, this is the toolkit that c
 No compilation for 5.1 & 5.8 (prebuilt bridge DLLs included).
 
 [![GitHub release](https://img.shields.io/github/v/release/miracle1814/ue5-automation?display_name=tag)](https://github.com/miracle1814/ue5-automation/releases/latest)
+[![Tests](https://github.com/miracle1814/ue5-automation/actions/workflows/tests.yml/badge.svg)](https://github.com/miracle1814/ue5-automation/actions/workflows/tests.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 [![SkillHub](https://img.shields.io/badge/SkillHub-UE5%20Blueprint%20Automation-2ea44f)](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
 [![miracle1814/ue5-automation MCP server](https://glama.ai/mcp/servers/miracle1814/ue5-automation/badges/score.svg)](https://glama.ai/mcp/servers/miracle1814/ue5-automation)
 
 **Download v6.5.4:** [portable package](https://github.com/miracle1814/ue5-automation/releases/download/v6.5.4/ue5-automation-v6.5.4-portable.zip) · [release notes](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.4) · [SkillHub listing](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
 
-> The SkillHub skill package is at **6.5.6** (docs-only; runtime remains **6.5.4**).
+> The SkillHub skill package is at **6.5.7** (docs-only; runtime remains **6.5.4**).
+
+![UE5 Blueprint Automation workflow](docs/assets/skillhub-overview.png)
+*Read → write → compile → verify → save/undo. `verified=true` is the gate.*
+
+> ⭐ **If this saves you time, star the repo** — it helps other Unreal developers find it.
 
 > 🎬 **Demo GIF** — coming soon: a 60–120s capture of "one sentence → agent builds a
 > blueprint → PIE runtime verification" will be embedded here.

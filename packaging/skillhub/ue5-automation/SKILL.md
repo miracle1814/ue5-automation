@@ -2,21 +2,24 @@
 slug: ue5-automation
 name: ue5-automation
 displayName: UE5 蓝图自动化
-version: 6.5.6
+version: 6.5.7
 runtime_version: 6.5.4
 summary: 让 AI 直接读写 UE5 蓝图节点、做编译诊断与 PIE 行为验证；Windows + UE 5.1/5.8。
-description: UE5 蓝图自动化操作规范（ue_automation / UE 自动化 / Unreal 自动化 / 蓝图自动化）：先读后写、整图事务、读回验证、编译诊断、PIE 行为验证、任务级撤销与多 Agent 协作。适用于已安装 ue5-automation bridge/MCP 的 UE5 工程；不适用于 C++ 代码生成、打包发布或纯美术制作。Windows + UE 5.1/5.8。本地 bridge 使用本机 token，无需外部 API Key。
+description: UE5 蓝图自动化操作规范（ue_automation / UE 自动化 / Unreal 自动化 / 蓝图自动化）：面向虚幻引擎（Unreal Engine 5 / UE5）的 Blueprint Automation，先读后写、整图事务、读回验证、编译诊断、PIE 行为验证、任务级撤销与多 Agent 协作。适用于已安装 ue5-automation bridge/MCP 的 UE5 工程；不适用于 C++ 代码生成、打包发布或纯美术制作。Windows + UE 5.1/5.8。本地 bridge 使用本机 token，无需外部 API Key。
 license: Apache-2.0
 requires_api_key: false
 homepage: https://github.com/miracle1814/ue5-automation
 tags:
   - unreal-engine
+  - unreal-engine-5
   - ue5
+  - ue5-blueprint
   - ue_automation
   - ue-automation
   - unreal-automation
   - blueprint
   - blueprint-automation
+  - 虚幻引擎
   - mcp
   - game-development
   - windows
@@ -34,7 +37,11 @@ tags:
 - 失败时诚实报错，不把“命令返回 200”当成“蓝图已改对”；
 - 多 Agent 并发时用幂等键/资产锁避免互相踩踏。
 
-> **版本对应：** Skill 包 `6.5.6` ↔ 运行包 `6.5.4`。本次只更新文档，运行时不变。
+> **版本对应：** Skill 包 `6.5.7` ↔ 运行包 `6.5.4`。本次只更新文档，运行时不变。
+
+![UE5 蓝图自动化工作流总览](https://skillhub-1388575217.cos.accelerate.myqcloud.com/skill-overview-images/uploads/805989/ffb2dc532a45458d889e5b720ae1b847.png)
+
+> 读 → 写 → 编译 → 验证 → 收尾；`verified=true` 才算通过。
 
 ## 何时使用
 
