@@ -138,7 +138,7 @@ AsyncTask/ParallelFor。
 **症状：** 图里有 3 个同名节点，只能改其中一个。
 **根因：** 只用标题定位，同名场景不唯一。
 **修复：** 先 `read_nodes` / `get_node_by_guid` 拿 32 位 GUID，再用 GUID 调
-`set_pin_default_value` / `disconnect_pins` / `delete_node`。
+`set_pin_default_value` / `ue5_disconnect_pin` / `ue5_delete_node`。
 
 ### P19 · spec 字段名写错
 

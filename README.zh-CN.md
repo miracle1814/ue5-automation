@@ -21,7 +21,7 @@
 >
 > English: [README.md](README.md) · 快速开始：[START-HERE.zh-CN.md](START-HERE.zh-CN.md)
 >
-> SkillHub 技能包已更新到 **6.5.7**（仅文档；运行时仍为 **v6.5.4**）。
+> SkillHub 技能包已更新到 **6.5.8**（仅文档；运行时仍为 **v6.5.4**）。
 
 ![UE5 蓝图自动化工作流总览](docs/assets/skillhub-overview.png)
 *读 → 写 → 编译 → 验证 → 收尾；`verified=true` 才算通过。*

@@ -2,7 +2,7 @@
 slug: ue5-automation
 name: ue5-automation
 displayName: UE5 蓝图自动化
-version: 6.5.7
+version: 6.5.8
 runtime_version: 6.5.4
 summary: 让 AI 直接读写 UE5 蓝图节点、做编译诊断与 PIE 行为验证；Windows + UE 5.1/5.8。
 description: UE5 蓝图自动化操作规范（ue_automation / UE 自动化 / Unreal 自动化 / 蓝图自动化）：面向虚幻引擎（Unreal Engine 5 / UE5）的 Blueprint Automation，先读后写、整图事务、读回验证、编译诊断、PIE 行为验证、任务级撤销与多 Agent 协作。适用于已安装 ue5-automation bridge/MCP 的 UE5 工程；不适用于 C++ 代码生成、打包发布或纯美术制作。Windows + UE 5.1/5.8。本地 bridge 使用本机 token，无需外部 API Key。
@@ -37,7 +37,7 @@ tags:
 - 失败时诚实报错，不把“命令返回 200”当成“蓝图已改对”；
 - 多 Agent 并发时用幂等键/资产锁避免互相踩踏。
 
-> **版本对应：** Skill 包 `6.5.7` ↔ 运行包 `6.5.4`。本次只更新文档，运行时不变。
+> **版本对应：** Skill 包 `6.5.8` ↔ 运行包 `6.5.4`。本次只更新文档，运行时不变。
 
 ![UE5 蓝图自动化工作流总览](https://skillhub-1388575217.cos.accelerate.myqcloud.com/skill-overview-images/uploads/805989/ffb2dc532a45458d889e5b720ae1b847.png)
 
@@ -129,7 +129,7 @@ Gameplay、蓝图自动化、UE 编辑器。
 **Step 6 · 读回**
 
 ```json
-{"command":"get_pin_default_value","params":{"node_id":"<node_guids.print>","pin_name":"InString"}}
+{"command":"get_pin_default_value","params":{"bp_path":"/Game/Test/BP_Smoke","node_id":"<node_guids.print>","pin_name":"InString"}}
 ```
 
 从 Step 4 返回体 `node_guids` 取 `print` 的 GUID，读回应为 `Hello`。
@@ -160,22 +160,23 @@ Gameplay、蓝图自动化、UE 编辑器。
 
 ## 工具档位（先确认再调用）
 
-运行包默认是 **gateway 档**，`tools/list` 只返回 11 个入口：
+运行包默认是 **gateway 档**，`tools/list` 只返回 12 个入口：
 
 `ue5_check_health`、`ue5_tool_search`、`ue5_execute_command`、`ue5_read_blueprint`、
 `ue5_search_blueprint_nodes`、`ue5_apply_blueprint_graph`、`ue5_compile_and_diagnose`、
-`ue5_screenshot`、`ue5_verify_scenario`、`ue5_task_begin`、`ue5_task_end`。
+`ue5_screenshot`、`ue5_verify_behavior`、`ue5_verify_scenario`、`ue5_task_begin`、
+`ue5_task_end`。
 
 另外两档（重启编辑器生效）：
 
 - `UE5_MCP_CORE_TOOLS=1` → 18 个高频工具；
-- `UE5_MCP_ALL_TOOLS=1` 或 `UE5_MCP_PROFILE=full` → 全量 33 个。
+- `UE5_MCP_ALL_TOOLS=1` 或 `UE5_MCP_PROFILE=full` → 全量 34 个。
 
 `health` 返回 `mcp_tool_profile` 与 `mcp_tool_count`。如果某个工具不在
 `tools/list` 里，用 `ue5_tool_search{query}` 发现后直接 `tools/call`，或走
 `ue5_execute_command{command, params}`；**不要因为目录里没看到就断言能力不存在**。
 
-命令白名单约 100 条，数量随版本增长。**以 `health.mcp_tool_count` 和
+命令白名单 101 条（v6.5.4），数量随版本增长。**以 `health.mcp_tool_count` 和
 `ue5_tool_search` 的结果为准，不要背数字。**
 
 ## 第一条规则：先检查工具可用性
@@ -243,8 +244,8 @@ Gameplay、蓝图自动化、UE 编辑器。
 
 硬规则：
 
-- **超过 2 个节点的新图一律走 `apply_graph`**；`connect_pins` / `disconnect_pin` /
-  `delete_node` 只用于单点手术。
+- **超过 2 个节点的新图一律走 `apply_graph`**；`connect_pins`（命令）/
+  `ue5_disconnect_pin`、`ue5_delete_node`（MCP 工具）只用于单点手术。
 - `pin_defaults` 是**图级**字段，键为 `"<节点id>.<引脚名>"`；写在单个节点里不会生效。
 - 函数节点必须带完整类路径（如 `/Script/Engine.KismetSystemLibrary`），
   只写 `KismetSystemLibrary` 在 5.8 上会定位失败。

@@ -20,29 +20,23 @@
 
 | 项 | 版本 |
 |---|---|
-| Skill 包 | **6.5.7** |
+| Skill 包 | **6.5.8** |
 | 运行包（插件 + bridge） | **6.5.4** |
 | 适用引擎 | UE 5.1.x 开箱；5.8.x 预编译；5.2–5.7 需重编译 |
 
-> 6.5.7 是**曝光与可发现性修订**，不改变运行时行为。安装、命令、安全模型
+> 6.5.8 是**文档正确性修订**，不改变运行时行为。安装、命令、安全模型
 > 与 6.5.4 完全一致；`VERIFICATION.md` 中的真机记录沿用 6.5.4。
 
-## 6.5.7 改了什么
+## 6.5.8 改了什么
 
-- 描述补充 `虚幻引擎` / `Unreal Engine 5` / `Blueprint Automation` 关键词，提升站内搜索命中。
-- 默认概述顶部新增工作流总览图（读 → 写 → 编译 → 验证 → 收尾）。
-- 新增 `unreal-engine-5`、`ue5-blueprint`、`虚幻引擎` 标签。
-- 分类增加 `dev-bug-fix`（编译诊断），与代码生成、脚本工具并列。
-- 6.5.6 的元数据修正保留：描述与 frontmatter 明确「本地 bridge 使用本机 token，无需外部 API Key」，
-  并声明 `requires_api_key: false`。
-- 新增「何时不要用」：明确排除 C++ 代码生成、打包发布、纯美术制作、无 bridge 环境。
-- 新增「工具档位」：gateway 11 / core 18 / full 33，附 `mcp_tool_profile` 检查方法。
-- 新增 `references/PITFALLS.md`：把 19 条蓝图陷阱与关键构建/环境陷阱整理为可执行速查。
-- 新增 `references/EXAMPLES.md`：6 个可直接照抄的端到端示例。
-- 命令目录不再写死数量，改为以 `health.mcp_tool_count` / `tool_search` 为准。
-- `INSTALL-WINDOWS.md` 移除“如果没有发布包”的退路话术，补客户端配置与 5.8 自启说明。
-- 商务合作、许可与商标声明从 `SKILL.md` 移到本 README，技能入口只保留操作内容。
-- 统一版本口径：删除 `skill v1.14.0` / `skill v2.0.1` 两套内部编号。
+- 修正工具档位：gateway **12** / core **18** / full **34**；gateway 列表补上
+  `ue5_verify_behavior`。
+- 修正 `get_pin_default_value` / `set_pin_default_value` 示例缺少 `bp_path`。
+- 明确 `ue5_disconnect_pin` / `ue5_delete_node` 是 MCP 工具，不是白名单命令。
+- 6.5.7 的曝光改动保留：描述关键词、工作流总览图、新增标签、`dev-bug-fix` 分类。
+- 6.5.6 的元数据修正保留：本地 bridge token、`requires_api_key: false`。
+- 6.5.5 的结构改动保留：「何时不要用」、工具档位、PITFALLS、EXAMPLES、
+  命令目录不写死数量、安装文档与商务/法务分层、统一版本口径。
 
 ## 安装
 
