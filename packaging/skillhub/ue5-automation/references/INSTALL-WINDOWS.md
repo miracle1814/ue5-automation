@@ -7,7 +7,7 @@
 
 | 项 | 版本 |
 |---|---|
-| 本 Skill 包 | 6.5.7 |
+| 本 Skill 包 | 6.5.8 |
 | 运行包 | 6.5.4 |
 | 适用引擎 | UE 5.1.x 开箱；5.8.x 预编译；5.2–5.7 需自行重编译 |
 
@@ -132,9 +132,9 @@ python Content\Python\install_mcp.py
 
 同时确认 `mcp_tool_profile` 与 `mcp_tool_count`：
 
-- `gateway`：11 个入口；
+- `gateway`：12 个入口；
 - `core`：18 个；
-- `full`：33 个。
+- `full`：34 个。
 
 ## 6. 升级与卸载
 

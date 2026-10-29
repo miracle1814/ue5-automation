@@ -11,7 +11,7 @@
 {"command":"read_blueprint","params":{"bp_path":"/Game/BP_Door","level":"L2"}}
 ```
 
-工具目录有三档：`gateway`（默认 11 个入口）、`core`（18 个）、`full`（33 个）。
+工具目录有三档：`gateway`（默认 12 个入口）、`core`（18 个）、`full`（34 个）。
 不在 `tools/list` 里的能力，用 `ue5_tool_search` 发现后 `tools/call`，或走
 `ue5_execute_command`。
 
@@ -47,8 +47,8 @@
 | `add_event_dispatcher` | 加事件分发器 |
 | `add_function_node` | 加函数调用节点 |
 | `connect_pins` | 连线（拓扑验证） |
-| `disconnect_pins` | 断线 |
-| `delete_node` | 删节点 |
+| `ue5_disconnect_pin` | 断线（MCP 工具；白名单无同名命令） |
+| `ue5_delete_node` | 删节点（MCP 工具；白名单无同名命令） |
 | `set_pin_default_value` | 改默认值 |
 | `set_node_position` | 移动节点 |
 | `add_cast_node` / `add_macro_node` / `add_switch_node` | 常用节点 |

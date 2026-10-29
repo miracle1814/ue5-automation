@@ -76,7 +76,7 @@ L1 只返回类信息、变量、CDO，适合先判断“这是什么”。需�
 ```
 
 ```json
-{"command":"get_pin_default_value","params":{"node_id":"<node_guids.print>","pin_name":"InString"}}
+{"command":"get_pin_default_value","params":{"bp_path":"/Game/Blueprints/BP_Door","node_id":"<node_guids.print>","pin_name":"InString"}}
 ```
 
 ```json
@@ -125,6 +125,7 @@ L1 只返回类信息、变量、CDO，适合先判断“这是什么”。需�
 
 ```json
 {"command":"set_pin_default_value","params":{
+  "bp_path":"/Game/Blueprints/BP_Door",
   "node_id":"A1B2C3D4E5F6...",
   "pin_name":"Condition",
   "new_value":"true"
@@ -220,6 +221,9 @@ L1 只返回类信息、变量、CDO，适合先判断“这是什么”。需�
   }
 }}
 ```
+
+> `replace=false` 只适用于空图；如果 `BP_Portal` 的 EventGraph 已有内容，先
+> `read_blueprint` 看现状，确认后再用 `replace=true`，否则工具会拒绝写入。
 
 ```json
 {"command":"session_lock_release","params":{
