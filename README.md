@@ -37,7 +37,7 @@ and "the operation actually did what it claimed" are where projects stall.
 
 This toolkit solves that with:
 
-- **A C++ bridge plugin** (59 editor UFUNCTIONs): node creation, pin/connection editing with
+- **A C++ bridge plugin** (editor-level UFUNCTIONs): node creation, pin/connection editing with
   GUID-based targeting, widget-tree authoring, material expression enumeration — the things
   Python physically cannot do in-engine.
 - **A verification discipline**: every write operation is **read back and compared**
@@ -209,7 +209,7 @@ Every write is **read back and compared**; mismatches raise loud errors. We cons
 
 ```
 ├── bridge/                     engine-side "hands"
-│   ├── BlueprintPythonBridge/  C++ bridge plugin (59 editor UFUNCTIONs)
+│   ├── BlueprintPythonBridge/  C++ bridge plugin (editor UFUNCTIONs)
 │   │   ├── Binaries/Win64/     prebuilt 5.1 DLL
 │   │   └── Source/             full source + build_for_engine.bat (5.2–5.8)
 │   ├── prebuilt-5.8/           prebuilt 5.8 DLL (+ UnrealEditor.modules)

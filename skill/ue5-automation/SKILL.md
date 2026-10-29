@@ -81,7 +81,7 @@
 | **UE Python 插件** | `Python Editor Script Plugin` 已启用 | UE 菜单 → Edit → Plugins → 搜索 "Python" → 确认已勾选 |
 | **Remote Execution** | `Editor Preferences → Python → Enable Remote Execution` 已勾选 | 不依赖固定端口，使用 UDP 多播自动发现 |
 | **ue_send.py** | Agent 与 UE 的通信脚本 | 放在 workspace/scripts/ 或通过 `UE_SEND_PATH` 指定 |
-| **C++ Bridge 插件** | 解锁蓝图节点级操作（✅ 已就绪 · 双引擎 DLL（5.1 1,048,576 B / 5.8 901,632 B，2026-10-25 编译）· 源码实测 59 UFUNCTION） | 现已可用；`bridge/BlueprintPythonBridge/` 完整包（DLL+头文件+uplugin），5.8 预编译见 `bridge/prebuilt-5.8/` |
+| **C++ Bridge 插件** | 解锁蓝图节点级操作（✅ 已就绪 · 双引擎 DLL（5.1 1,048,576 B / 5.8 901,632 B，2026-10-25 编译）· 源码头文件提供编辑器级 UFUNCTION） | 现已可用；`bridge/BlueprintPythonBridge/` 完整包（DLL+头文件+uplugin），5.8 预编译见 `bridge/prebuilt-5.8/` |
 
 ### 2.2 Bridge 通信架构（混合通道）
 
@@ -485,7 +485,7 @@ python -m pytest tests\test_mermaid_render_audit.py::test_6_l2_online -v --ue-on
 
 | 限制 | 影响 | 缓解方式 |
 |:---|:---|:---|
-| 蓝图节点读取依赖 C++ Bridge | v0.1 无法生成节点拓扑和连线 | ✅ v0.2 已解决（Bridge API 覆盖 · 随包 DLL 59 UFUNCTION） |
+| 蓝图节点读取依赖 C++ Bridge | v0.1 无法生成节点拓扑和连线 | ✅ v0.2 已解决（Bridge API 覆盖 · 随包 DLL 提供编辑器级 UFUNCTION） |
 | 蓝图创建不支持节点连线 | 创建后需手动连线 | ✅ v0.2 已解决（ConnectPins API） |
 | 大型项目扫描可能超时 | 200+ 蓝图项目扫描 > 5 分钟 | 增量扫描（仅扫变更文件）；后台异步+进度推送 |
 | 截图识别准确率非 100% | 复杂节点图可能误识别 | 输出标注识别置信度；低置信节点标记 `❓` |

@@ -36,7 +36,7 @@
 建个资产演示一天就能跑通，但节点级建图、可靠连线、"操作真的生效了"这三件事，
 才是项目的生死线。本工具链的答案：
 
-- **C++ 桥插件**（59 个编辑器 UFUNCTION）：节点创建、基于 GUID 的引脚/连线编辑、
+- **C++ 桥插件**（编辑器级 UFUNCTION）：节点创建、基于 GUID 的引脚/连线编辑、
   控件树读写、材质表达式枚举——这些是引擎 Python **物理上做不到**的事。
 - **回读验证纪律**：每个写操作**读回并比对**（不一致即 fail-loud，绝不假成功）；
   连线对照实时拓扑校验；编译结果用日志模式扫描回读。
@@ -198,7 +198,7 @@ python analyzer.py --input reader_out.json --summary
 
 ```
 ├── bridge/                          引擎侧的"手"
-│   ├── BlueprintPythonBridge/       C++ 桥插件（59 个编辑器 UFUNCTION）
+│   ├── BlueprintPythonBridge/       C++ 桥插件（编辑器级 UFUNCTION）
 │   │   ├── Binaries/Win64/          UE 5.1 预编译 DLL（901,120 B · 2026-09-18 编译）
 │   │   └── Source/                  完整源码 + build_for_engine.bat（5.2–5.8 自编译）
 │   ├── prebuilt-5.8/                UE 5.8 预编译 DLL（+ UnrealEditor.modules，成对部署）
