@@ -2,14 +2,21 @@
 slug: ue5-automation
 name: ue5-automation
 displayName: UE5 蓝图自动化
-version: 6.5.4
+version: 6.5.6
+runtime_version: 6.5.4
 summary: 让 AI 直接读写 UE5 蓝图节点、做编译诊断与 PIE 行为验证；Windows + UE 5.1/5.8。
-description: UE5 蓝图自动化操作规范：先读后写、整图事务、读回验证、编译诊断、运行时不宕机断言、任务级撤销与多 Agent 协作。适用于已经安装 ue5-automation bridge/MCP 的 UE5 工程。
+description: UE5 蓝图自动化操作规范（ue_automation / UE 自动化 / Unreal 自动化 / 蓝图自动化）：先读后写、整图事务、读回验证、编译诊断、PIE 行为验证、任务级撤销与多 Agent 协作。适用于已安装 ue5-automation bridge/MCP 的 UE5 工程；不适用于 C++ 代码生成、打包发布或纯美术制作。Windows + UE 5.1/5.8。本地 bridge 使用本机 token，无需外部 API Key。
 license: Apache-2.0
+requires_api_key: false
 homepage: https://github.com/miracle1814/ue5-automation
 tags:
   - unreal-engine
+  - ue5
+  - ue_automation
+  - ue-automation
+  - unreal-automation
   - blueprint
+  - blueprint-automation
   - mcp
   - game-development
   - windows
@@ -18,33 +25,16 @@ tags:
 
 # UE5 蓝图自动化
 
-本 Skill 是 `ue5-automation` 的操作契约。它不替代运行包：真正写 UE 编辑器的是
-`ue5-automation` bridge（UE 插件 + 本机 HTTP/MCP 服务）。本 Skill 负责让 Agent：
+本 Skill 是 `ue5-automation` 的**操作契约**，不是运行包。真正读写 UE 编辑器的是
+`ue5-automation` bridge（UE 插件 + 本机 HTTP/MCP 服务）。它负责让 Agent：
 
-- 在动手前先读清资产和图；
+- 动手前先读清资产和图；
 - 用整图事务写入，而不是一个节点一个节点地试；
 - 写完后编译、读回、运行时验证；
 - 失败时诚实报错，不把“命令返回 200”当成“蓝图已改对”；
 - 多 Agent 并发时用幂等键/资产锁避免互相踩踏。
 
-## 5 分钟最小成功路径
-
-如果只想先确认“这东西真能用”，按下面跑一遍：
-
-1. `health` → 确认 `engine_version` / `bridge_loaded`。
-2. `build_blueprint{bp_name:"BP_Smoke", pkg:"/Game/Test/", parent:"Actor"}`
-   → 建一个空蓝图，确认 `success=true`。
-3. `search_blueprint_nodes{bp_path:"/Game/Test/BP_Smoke", query:"Print"}`
-   → 确认能返回候选节点。
-4. `apply_graph` 写入 `BeginPlay → PrintString`：
-   - 函数节点带 `class:"/Script/Engine.KismetSystemLibrary"`；
-   - 图级 `pin_defaults:{"print.InString":"Hello"}`。
-5. `compile_and_diagnose` → 确认 `compiled=true`。
-6. `get_pin_default_value{node_id:"PrintString", pin_name:"InString"}`
-   → 读回 `Hello`。
-7. `save_asset` → 确认文件落盘。
-
-这条路径覆盖了“建资产 → 查节点 → 整图写入 → 编译 → 读回 → 保存”的核心闭环。
+> **版本对应：** Skill 包 `6.5.6` ↔ 运行包 `6.5.4`。本次只更新文档，运行时不变。
 
 ## 何时使用
 
@@ -60,19 +50,126 @@ tags:
 触发词：UE5、Unreal、蓝图、Blueprint、蓝图节点、PIE、UMG、Material、DataTable、
 Gameplay、蓝图自动化、UE 编辑器。
 
+## 何时不要用
+
+以下场景不属于本 Skill，强行使用只会得到假成功或半成品：
+
+- **C++ 代码生成、模块重构、Build.cs / 反射宏调整** → 用 C++ 工具链或 IDE，本 Skill 只操作蓝图/资产层。
+- **打包、签名、上架、CI 分发** → 用 UAT 或专门的打包 Skill。
+- **纯美术创作、材质外观设计、动画制作** → 本 Skill 能读写资产，但不代替创作工具。
+- **没有安装 bridge、编辑器未启动、MCP 未连接** → 先按安装文档部署；不要假装工具可用。
+- **需要执行任意 Python / 任意控制台命令** → 本 Skill 明确不支持，也不应尝试绕过白名单。
+- **非 Windows 主机** → bridge 是 Win64 插件，其他平台不支持。
+
+## 5 分钟最小成功路径
+
+如果只想先确认“这东西真能用”，按下面跑一遍。
+
+**Step 1 · health**
+
+```json
+{"command":"health","params":{}}
+```
+
+确认返回 `engine_version` / `bridge_loaded`。
+
+**Step 2 · 建一个空蓝图**
+
+```json
+{"command":"build_blueprint","params":{"bp_name":"BP_Smoke","pkg":"/Game/Test/","parent":"Actor"}}
+```
+
+确认返回 `success=true`。
+
+**Step 3 · 查节点签名**
+
+```json
+{"command":"search_blueprint_nodes","params":{"bp_path":"/Game/Test/BP_Smoke","query":"Print"}}
+```
+
+确认能返回候选节点。
+
+**Step 4 · 写入 BeginPlay → PrintString**
+
+```json
+{"command":"apply_graph","params":{
+  "bp_path":"/Game/Test/BP_Smoke",
+  "replace":true,
+  "graph_spec":{
+    "graph":"EventGraph",
+    "nodes":[
+      {"id":"begin","kind":"event","target":"ReceiveBeginPlay"},
+      {"id":"print","kind":"function",
+       "class":"/Script/Engine.KismetSystemLibrary",
+       "target":"PrintString"}
+    ],
+    "edges":[{"from":"begin.then","to":"print.execute"}],
+    "pin_defaults":{"print.InString":"Hello"}
+  }
+}}
+```
+
+确认返回 `verified=true`。
+
+**Step 5 · 编译**
+
+```json
+{"command":"compile_and_diagnose","params":{"bp_path":"/Game/Test/BP_Smoke"}}
+```
+
+确认 `compiled=true`。
+
+**Step 6 · 读回**
+
+```json
+{"command":"get_pin_default_value","params":{"node_id":"<node_guids.print>","pin_name":"InString"}}
+```
+
+从 Step 4 返回体 `node_guids` 取 `print` 的 GUID，读回应为 `Hello`。
+
+**Step 7 · 保存**
+
+```json
+{"command":"save_asset","params":{"asset_path":"/Game/Test/BP_Smoke"}}
+```
+
+确认文件落盘。
+
+这条路径覆盖了“建资产 → 查节点 → 整图写入 → 编译 → 读回 → 保存”的核心闭环。
+
 ## 前置条件
 
 | 项 | 要求 |
 |---|---|
-| 系统 | Windows（bridge 是 Win64 插件） |
+| 系统 | Windows 10/11 x64（bridge 是 Win64 插件） |
 | 引擎 | UE 5.1.x 开箱可用；5.8.x 有预编译 DLL；5.2–5.7 需按源码重编译 |
 | 编辑器 | 启用 `Python Editor Script Plugin` 与 `Editor Scripting Utilities` |
-| 运行包 | 已安装 `ue5-automation` 插件、宿主脚本与 bridge |
+| 运行包 | 已安装 `ue5-automation` 插件、宿主脚本与 bridge（v6.5.4） |
 | MCP | 已连接本机 `http://127.0.0.1:8889/mcp`，或已配置 stdio 代理 |
 | 权限 | 用户明确授权写入当前 UE 工程 |
 
 如果 `health` / `ue5_check_health` 不可用，**不要假装工具已连接**；先让用户按
 `references/INSTALL-WINDOWS.md` 安装运行包并启动编辑器。
+
+## 工具档位（先确认再调用）
+
+运行包默认是 **gateway 档**，`tools/list` 只返回 11 个入口：
+
+`ue5_check_health`、`ue5_tool_search`、`ue5_execute_command`、`ue5_read_blueprint`、
+`ue5_search_blueprint_nodes`、`ue5_apply_blueprint_graph`、`ue5_compile_and_diagnose`、
+`ue5_screenshot`、`ue5_verify_scenario`、`ue5_task_begin`、`ue5_task_end`。
+
+另外两档（重启编辑器生效）：
+
+- `UE5_MCP_CORE_TOOLS=1` → 18 个高频工具；
+- `UE5_MCP_ALL_TOOLS=1` 或 `UE5_MCP_PROFILE=full` → 全量 33 个。
+
+`health` 返回 `mcp_tool_profile` 与 `mcp_tool_count`。如果某个工具不在
+`tools/list` 里，用 `ue5_tool_search{query}` 发现后直接 `tools/call`，或走
+`ue5_execute_command{command, params}`；**不要因为目录里没看到就断言能力不存在**。
+
+命令白名单约 100 条，数量随版本增长。**以 `health.mcp_tool_count` 和
+`ue5_tool_search` 的结果为准，不要背数字。**
 
 ## 第一条规则：先检查工具可用性
 
@@ -137,16 +234,17 @@ Gameplay、蓝图自动化、UE 编辑器。
  }}
 ```
 
-> `pin_defaults` 是**图级**字段，键为 `"<节点id>.<引脚名>"`；写在单个节点里不会生效。
-> 函数节点必须带完整类路径（如 `/Script/Engine.KismetSystemLibrary`），
-> 只写 `KismetSystemLibrary` 在 5.8 上会定位失败。
+硬规则：
 
-约定：
-
-- 节点引用优先用 32 位十六进制 GUID；用标题时不能有歧义；
-- `replace=true` 才会替换已有图，空图首次写入也要显式确认；
-- 返回值必须包含 `verified=true`；失败会回滚并返回错误，不要重试同一份错误 spec；
-- 小手术才用 `connect_pins` / `disconnect_pin` / `delete_node`，不要用它们拼整张图。
+- **超过 2 个节点的新图一律走 `apply_graph`**；`connect_pins` / `disconnect_pin` /
+  `delete_node` 只用于单点手术。
+- `pin_defaults` 是**图级**字段，键为 `"<节点id>.<引脚名>"`；写在单个节点里不会生效。
+- 函数节点必须带完整类路径（如 `/Script/Engine.KismetSystemLibrary`），
+  只写 `KismetSystemLibrary` 在 5.8 上会定位失败。
+- 节点引用优先用 32 位十六进制 GUID；用标题时不能有歧义。
+- `replace=true` 才会替换已有图；空图首次写入也要显式确认。
+- 返回值必须包含 `verified=true`；失败会回滚并返回错误，**不要重试同一份错误 spec**。
+- 编译失败 ≠ 重写：图内容正确但编译不过时，走编译修复循环，不要推倒重来。
 
 ### 3. 编译：看结构化诊断
 
@@ -157,6 +255,14 @@ Gameplay、蓝图自动化、UE 编辑器。
 
 每个错误尽量带：资产、函数/图、节点标题、`node_guid`、引脚提示、规则库
 `pitfall_ref/fix_hint`。下次修改用 `node_guid` 定位，不要靠标题猜。
+
+修复循环：
+
+- 最多连续 5 轮；同参数重复失败 2 次提前熔断；
+- 修复期间**不要 `save_asset`**，确认前所有改动只在内存里；
+- 修复成功后必须 read-back，编译通过 ≠ 图是对的；
+- `errors=[]` 不等于没有错误，结合 `warnings` 和 `compiled` 判断；
+- 结果 Unknown（Live Coding 等）要如实说“不知道成没成”，不要报成失败。
 
 ### 4. 验证：编译通过不等于行为正确
 
@@ -189,7 +295,9 @@ Gameplay、蓝图自动化、UE 编辑器。
 - `verified=true` 才是通过；截图失败只算证据失败，不翻转 `verified`；
 - 场景默认禁止 `delete_asset`、`agent_undo`、`batch_asset_ops`、`apply_graph{replace}`
   等高危命令；需要时显式 `allow_destructive=true`；
-- 总超时默认 300s，上限 1800s。
+- 总超时默认 300s，上限 1800s；
+- 视觉验证先看 `camera_source`：`fallback` 机位的构图不能作为结论；
+- `source="pie"` 在 PIE 未运行时会明确报错，不要拿编辑器画面冒充运行证据。
 
 ### 5. 收尾：保存 + 任务账本
 
@@ -200,34 +308,9 @@ Gameplay、蓝图自动化、UE 编辑器。
 
 - 写命令会自动留一个可撤销的 UE 事务步；
 - `agent_undo_status` 看可回滚步数，`agent_undo` 回滚最近 N 个 agent 步；
-- 回滚遇到用户操作会立即停，不会跳过用户改动。
-
-## 常用命令速查
-
-| 需求 | 命令 / 工具 |
-|---|---|
-| 读蓝图 | `read_blueprint` / `ue5_read_blueprint` |
-| 查节点签名 | `search_blueprint_nodes` |
-| 整图写入 | `apply_graph` / `ue5_apply_blueprint_graph` |
-| 连线 | `connect_pins` / `ue5_connect_pins` |
-| 断线 | `disconnect_pins` / `ue5_disconnect_pin` |
-| 删节点 | `delete_node` / `ue5_delete_node` |
-| 编译诊断 | `compile_and_diagnose` |
-| 行为断言 | `verify_behavior` |
-| 场景验收 | `verify_scenario` |
-| 截图 | `capture_viewport` / `capture_pie` / `ue5_screenshot` |
-| 资产治理 | `batch_asset_ops`（默认 dry-run） |
-| 材质/UMG/DataTable | `material_*` / `widget_*` / `datatable_*` |
-| 撤销 | `agent_undo_status` / `agent_undo` |
-| 多 Agent 锁 | `session_lock_acquire/release/status` |
-| 幂等重试 | 写命令加 `idempotency_key` |
-| 最近回执 | `receipt_list` |
-
-完整 101 条命令用：
-
-```json
-{"tool":"ue5_tool_search","arguments":{"query":"material","limit":10}}
-```
+- 回滚遇到用户操作会立即停，不会跳过用户改动；
+- 资产创建/删除**不在**撤销栈：回滚不会删新建蓝图，也不会恢复已删资产；
+- 没有编译/写入/截图记录的任务，收尾会被标 `unverified`；先验证再声称成功。
 
 ## 多 Agent 协作
 
@@ -242,15 +325,26 @@ Gameplay、蓝图自动化、UE 编辑器。
 
 锁是协作式，不是编辑器强制锁。所有写操作走 `execute_command` 才能经过锁层。
 
-## 安全与权限
+## 安全与授权
+
+执行以下操作前必须得到用户明确同意：
+
+- 删除资产；
+- 批量重命名/搬迁；
+- 替换已有图（`apply_graph{replace:true}`）；
+- 保存/覆盖工程资产；
+- 向工程写入新资产；
+- 启停 PIE；
+- 撤销用户已有操作。
+
+只读查询（health/read/list/logs）不需要额外确认。其余边界：
 
 - bridge 只监听 `127.0.0.1`，需要 `X-Skill-Token`；
 - 没有默认 token；token 存在本机 `%APPDATA%\ue5_bridge\token`；
 - 命令白名单，不允许任意代码执行；
 - 资产路径只允许 `/Game/`；
 - 删除/批量操作默认 dry-run 或需要 `confirm`；
-- 不向外部服务上传工程内容；日志读取有允许根；
-- 写操作必须由用户明确授权；不要自动保存整个工程。
+- 不向外部服务上传工程内容；日志读取有允许根。
 
 ## 失败时怎么做
 
@@ -266,32 +360,16 @@ Gameplay、蓝图自动化、UE 编辑器。
 - Windows only；UE 5.2–5.7 需自行重编译 bridge；
 - AnimBP 只读：能枚举图，节点级属性在部分版本未暴露；写入通道未开放；
 - 场景真机验证覆盖 5.1/5.8 的 command/wait/断言；复杂 PIE 场景请先在工程内小步试；
-- 无 TLS；跨机使用需自建隧道。
-
-## 企业合作 / Commercial
-
-- **企业集成**：把 UE 蓝图自动化接进团队现有 Agent / CI / 资产管线。
-- **版本适配**：UE 5.2–5.7 的 bridge 重编译与回归。
-- **定制开发**：领域模板、批量迁移、审计/审批、私有工具链。
-- **培训/支持**：团队上手、故障排查、交付验收。
-- 联系方式：GitHub Issue 标题注明 `[Commercial]`，或通过
-  https://github.com/miracle1814 联系作者。
-
-## 授权与商标
-
-- 本项目原创代码：Apache-2.0；第三方组件与完整声明见仓库
-  `THIRD_PARTY_NOTICES.md`。
-- 截图/PIE 部分实现参考 UEBox / UnrealAgentLink（MIT），完整 MIT 文本随仓库与
-  移植包分发。
-- Unreal、Unreal Engine、UE 是 Epic Games, Inc. 的商标；本 Skill 与 Epic Games
-  无隶属或背书关系。引擎头文件/二进制仍受 Epic EULA 约束。
-- 本 Skill 不包含 Epic 美术资源、Logo、示例资产或市场内容。
+- 无 TLS；跨机使用需自建隧道；
+- UE 5.8 起项目自身 `Content/Python/init_unreal.py` 不再自动执行，自启依赖插件侧 init。
 
 ## 参考
 
-- 安装：`references/INSTALL-WINDOWS.md`
+- 安装与客户端配置：`references/INSTALL-WINDOWS.md`
 - 命令目录：`references/COMMANDS.md`
+- 端到端示例：`references/EXAMPLES.md`
+- 已知陷阱（Top 20+）：`references/PITFALLS.md`
 - 常见故障：`references/TROUBLESHOOTING.md`
-- 验证记录：`references/VERIFICATION.md`
 - 安全模型：`references/SECURITY.md`
+- 验证记录：`references/VERIFICATION.md`
 - 项目主页：https://github.com/miracle1814/ue5-automation
