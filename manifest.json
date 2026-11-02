@@ -16,8 +16,8 @@
   },
   "skill_section": {
     "path": "skill/ue5-automation",
-    "file_count": 81,
-    "total_bytes": 3161599,
+    "file_count": 83,
+    "total_bytes": 3171986,
     "files": [
       {
         "path": "API_REFERENCE.md",
@@ -300,6 +300,11 @@
         "md5": "21FD2EA29741E2D9A7F1ED471D4928E7"
       },
       {
+        "path": "scripts/doctor.py",
+        "bytes": 3311,
+        "md5": "3F2AAB40D91793BED8756E68D48973E4"
+      },
+      {
         "path": "scripts/fake_unreal.py",
         "bytes": 97494,
         "md5": "2E536CAE7716D17666E91BED1A13981A"
@@ -343,6 +348,11 @@
         "path": "scripts/project_analyzer.py",
         "bytes": 1627,
         "md5": "A00D212219FE382E5A37CEFBF5CC5BCC"
+      },
+      {
+        "path": "scripts/smoke.py",
+        "bytes": 7076,
+        "md5": "0624C10A4B49231E5454C0B2B4091EAB"
       },
       {
         "path": "scripts/task_cleanup.py",
