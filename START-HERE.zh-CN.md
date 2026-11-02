@@ -6,8 +6,8 @@
 > **这是什么**：一套让 AI（大模型/Agent）**自动化操作 UE 编辑器**的工具包 —— 读蓝图、写蓝图、改蓝图、建材质、建 UMG 控件蓝图、跑 PIE 验证行为、诊断报错、评估项目。
 > **支持版本**：UE **5.1.x / 5.8.x 开箱即用**（随包预编译桥）；5.2–5.7 需按源码自助重编译，见下文「版本矩阵」。
 > **接入方式**：任意 **MCP 客户端**（ZCode / Claude Desktop / Cursor …）直连，或用脚本/CLI 调用。
-> **当前版本**：v6.5.4 · 101 条白名单命令 / 34 个 MCP 工具。
-> **下载**：[GitHub Release](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.4) · [SkillHub](https://skillhub.cn/skills/user_9249b15b/ue5-automation)。
+> **当前版本**：v6.5.5 · 101 条白名单命令 / 34 个 MCP 工具。
+> **下载**：[GitHub Release](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.5) · [SkillHub](https://skillhub.cn/skills/user_9249b15b/ue5-automation)。
 
 ---
 
@@ -89,7 +89,7 @@ python blueprint_editor.py update /Game/BP_X 打印字符串 InString "Hello"
 
 > **为什么第 5 步重要**：编译通过 ≠ 逻辑正确。工具坚持"读运行时状态证明行为"，并对每个写操作做**回读比对**（比如传送后坐标不对会直接报错，绝不谎报成功）。
 
-## 五、能力清单（v6.5.4 · 101 条命令 + 34 个 MCP 工具）
+## 五、能力清单（v6.5.5 · 101 条命令 + 34 个 MCP 工具）
 
 | 能力域 | 能做什么 | 代表命令 / 工具 |
 |:--|:--|:--|

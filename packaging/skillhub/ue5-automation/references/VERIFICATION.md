@@ -4,17 +4,18 @@
 
 | 项 | 版本 |
 |---|---|
-| 本 Skill 包 | **6.5.9**（文档修订，2026-10-29） |
-| 运行包 | **6.5.4**（2026-10-28） |
+| 本 Skill 包 | **6.5.10**（2026-11-02） |
+| 运行包 | **6.5.5**（2026-11-02） |
 | 真机验证 | UE 5.1.1 + UE 5.8.2 |
 
-> 6.5.9 只改文档：未改 bridge、插件、DLL、命令实现。下面的运行包与真机数据
-> 沿用 6.5.4；本次没有重新跑在线用例。
+> 6.5.10 对应运行包 6.5.5：修复节点搜索、重复启动与 PIE 生成报错，并新增
+> `doctor.py` / `smoke.py`。下面的 2026-11-02 数据为本版重跑；2026-10-29 的
+> 记录保留作历史对照。
 
-## 离线回归（运行包 6.5.4）
+## 离线回归（运行包 6.5.5）
 
 ```text
-820 passed / 95 skipped / 0 failed
+846 passed / 95 skipped / 0 failed
 ```
 
 - `95 skipped` 是需要真实编辑器的在线用例，不是失败；
@@ -22,7 +23,7 @@
   fail-loud 分支；
 - 移植包提供逐文件 SHA256 清单，可跨机比对。
 
-## 真机矩阵（运行包 6.5.4）
+## 真机矩阵（6.5.4 历史记录）
 
 | 项 | UE 5.1.1 | UE 5.8.2 |
 |---|---|---|
@@ -36,7 +37,27 @@
 | HTTP 413（9MB） | — | 通过 |
 | stdio 34 工具 | — | 通过 |
 
-## 本次实机冒烟（2026-10-29）
+## 本次实机冒烟（2026-11-02，运行包 6.5.5）
+
+环境：Windows + UE **5.1.1-23901901**，引擎自带 Python 3.9.7，
+运行包 **v6.5.5**，全新 `TP_BlankBP` 模板工程（非真实项目）。
+
+| 步骤 | 结果 |
+|---|---|
+| `scripts/doctor.py` | token / health / `bridge_loaded` / 版本 / 项目路径全 PASS |
+| `scripts/smoke.py`（连续两次） | 全 PASS：建图 → 搜索 → 写图 → 编译 → 读回 → 保存 |
+| `search_blueprint_nodes` | `BeginPlay` 命中 `ReceiveBeginPlay`；`PrintString` 命中内置目录；`print` 不再返回 `Blueprint*` |
+| 重复启动 | 仅一条 `service started`，不再出现 10048 双自启 |
+| `spawn_actor(world="pie")` | UE 5.1 Python 未导出生成接口 → 明确报错并提示编辑器世界/预置 Actor 两条替代路径 |
+
+已知边界：
+
+- UE 5.1 的 `BeginSpawningActorFromClass` / `BeginDeferredActorSpawnFromClass`
+  标记 `BlueprintInternalUseOnly`，Python 侧没有生成入口；本版不宣称 5.1 可在
+  PIE 内动态生成 Actor。
+- 本轮未重跑 5.8 真机与截图场景；5.8 数据沿用 6.5.4 记录。
+
+## 历史实机冒烟（2026-10-29，运行包 6.5.4）
 
 环境：Windows + UE **5.1.1-23901901**，引擎自带 Python 3.9.7，
 运行包 **v6.5.4**，全新 `TP_BlankBP` 模板工程（非真实项目）。
@@ -58,7 +79,7 @@
 已知现象（不影响主路径）：
 
 - 两个自启入口会各调一次 `start()`，第二个打印 `[Errno 10048] ... service stopped`；
-  `/health` 正常，服务由第一个入口提供。
+  `/health` 正常，服务由第一个入口提供（**6.5.5 已修复**）。
 - `spawn_actor` 直接往 PIE 世界生成蓝图 Actor 返回 None；先放编辑器世界再 PIE 可正常
   BeginPlay（本次即用此路径验证）。
 - 未采集实机截图（窗口失焦会导致 PIE 截图超时）；行为验证不依赖截图。
@@ -71,16 +92,20 @@
 - AnimBP 读不到节点时明确降级，不宣称节点可读；
 - 移植包有逐文件 SHA256 清单，可跨机对比。
 
-## 本次文档修订做了什么
+## 本次发布做了什么
 
-- 元数据修正：明确本地 bridge 使用本机 token，无需外部 API Key；frontmatter
-  声明 `requires_api_key: false`；
-- 新增 `PITFALLS.md`（19 条蓝图陷阱 + 8 条构建/环境陷阱）与 `EXAMPLES.md`
-  （6 个端到端示例）；
-- `SKILL.md` 增加「何时不要用」「工具档位」，删除与 `COMMANDS.md` 重复的
-  大表，商务/法务内容移到 `README.md`；
-- 统一版本口径：删除内部 `skill v1.14.0` / `skill v2.0.1` 编号；
-- 命令目录不再写死数量，改为以 `health.mcp_tool_count` / `tool_search` 为准。
+- 运行包 6.5.5：`search_blueprint_nodes` 增加 `PrintString` / `Delay` 静态目录，
+  修正 `BeginPlay` → `ReceiveBeginPlay` 匹配，过滤 `Print` → `Blueprint*` 噪声；
+- 运行包 6.5.5：`start()` 增加跨模块启动锁与 5 秒端口宽限，消除重复加载的
+  10048 双自启；
+- 运行包 6.5.5：PIE `spawn_actor` 在 UE 5.1 Python 无生成入口时明确报错，
+  不再静默返回 `None`；
+- Skill 6.5.10：新增 `scripts/doctor.py` / `scripts/smoke.py`，smoke 支持重复运行；
+- 文档同步：安装日期、版本表、验证记录与已知边界按 6.5.5 实机结果更新。
+
+历史文档修订（6.5.9）：元数据 `requires_api_key: false`；新增 `PITFALLS.md` /
+`EXAMPLES.md`；`SKILL.md` 增加「何时不要用」「工具档位」；统一版本口径；
+命令目录改为以 `health.mcp_tool_count` / `tool_search` 为准。
 
 ## 没重跑的部分（如实说明）
 

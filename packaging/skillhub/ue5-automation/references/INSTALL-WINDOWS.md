@@ -7,15 +7,15 @@
 
 | 项 | 版本 |
 |---|---|
-| 本 Skill 包 | 6.5.9 |
-| 运行包 | 6.5.4 |
+| 本 Skill 包 | 6.5.10 |
+| 运行包 | 6.5.5 |
 | 适用引擎 | UE 5.1.x 开箱；5.8.x 预编译；5.2–5.7 需自行重编译 |
 
 运行包下载（固定入口）：
 
 ```text
-https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.4
-https://github.com/miracle1814/ue5-automation/releases/download/v6.5.4/ue5-automation-v6.5.4-portable.zip
+https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.5
+https://github.com/miracle1814/ue5-automation/releases/download/v6.5.5/ue5-automation-v6.5.5-portable.zip
 ```
 
 > 不要用旧版本 DLL 冒充当前版本；DLL 与引擎版本不匹配会报
@@ -39,7 +39,7 @@ https://github.com/miracle1814/ue5-automation/releases/download/v6.5.4/ue5-autom
 tools\install.bat
 ```
 
-> 包根目录没有 `install.bat`（v6.5.4 包里在 `tools\`）。如果系统没有
+> 包根目录没有 `install.bat`（v6.5.5 包里在 `tools\`）。如果系统没有
 > `py` / `python`，用引擎自带 Python 直接跑部署脚本：
 >
 > ```bat

@@ -15,9 +15,9 @@ No compilation for 5.1 & 5.8 (prebuilt bridge DLLs included).
 [![SkillHub](https://img.shields.io/badge/SkillHub-UE5%20Blueprint%20Automation-2ea44f)](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
 [![miracle1814/ue5-automation MCP server](https://glama.ai/mcp/servers/miracle1814/ue5-automation/badges/score.svg)](https://glama.ai/mcp/servers/miracle1814/ue5-automation)
 
-**Download v6.5.4:** [portable package](https://github.com/miracle1814/ue5-automation/releases/download/v6.5.4/ue5-automation-v6.5.4-portable.zip) · [release notes](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.4) · [SkillHub listing](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
+**Download v6.5.5:** [portable package](https://github.com/miracle1814/ue5-automation/releases/download/v6.5.5/ue5-automation-v6.5.5-portable.zip) · [release notes](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.5) · [SkillHub listing](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
 
-> The SkillHub skill package is at **6.5.9** (docs-only; runtime remains **6.5.4**).
+> The SkillHub skill package is at **6.5.10** (runtime **6.5.5**): search fixes, idempotent start, and `doctor.py` / `smoke.py` self-checks.
 
 ![UE5 Blueprint Automation workflow](docs/assets/skillhub-overview.png)
 *Read → write → compile → verify → save/undo. `verified=true` is the gate.*
@@ -236,7 +236,7 @@ The core is Apache-2.0. Paid work is available for enterprise integration, UE 5.
 ## Status & tested-against
 
 - Actively maintained — monthly releases, per-release changelog, CI on every push
-- Offline regression: **820 passed / 0 failed** (95 skipped = online-only tests that need a live editor)
+- Offline regression: **846 passed / 0 failed** (95 skipped = online-only tests that need a live editor)
 - Live end-to-end verified on **UE 5.1.1** and **UE 5.8.2** (editor → official MCP →
   toolset → C++ bridge → live PIE state)
 - See [CHANGELOG.md](CHANGELOG.md) for per-release summaries

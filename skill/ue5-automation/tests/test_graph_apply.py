@@ -142,12 +142,25 @@ class TestSearchBlueprintNodes(_Base):
                       query="printstring").json()["result"]
         sources = {(e["source"], e["target"]) for e in r["results"]}
         self.assertIn(("graph", "PrintString"), sources, sources)
-        self.assertIn(("engine_class", "PrintString"), sources, sources)
+        self.assertTrue(
+            ("engine_class", "PrintString") in sources
+            or ("engine_catalog", "PrintString") in sources, sources)
         # 变量 get/set 双候选
         r = self._cmd("search_blueprint_nodes", bp_path="/Game/Test/BP_GraphApply",
                       query="health").json()["result"]
         kinds = {e["kind"] for e in r["results"]}
         self.assertEqual(kinds, {"variable_get", "variable_set"}, r["results"])
+
+    def test_search_print_prefers_printstring_without_blueprint_noise(self):
+        """v6.5.5：Print 命中 PrintString，不再把 Blueprint* 当候选。"""
+        self._new_bp()
+        r = self._cmd("search_blueprint_nodes",
+                      bp_path="/Game/Test/BP_GraphApply",
+                      query="print").json()["result"]
+        targets = [e["target"] for e in r["results"]]
+        self.assertIn("PrintString", targets, targets)
+        self.assertFalse(any(t.lower().startswith("blueprint") for t in targets),
+                         targets)
 
     def test_search_case_insensitive_and_friendly_alias(self):
         """大小写不敏感 + 事件友好名（Tick）命中标准名（ReceiveTick）。"""
@@ -158,6 +171,24 @@ class TestSearchBlueprintNodes(_Base):
                           query=q).json()["result"]
             self.assertTrue(any(e["target"] == "ReceiveTick"
                                 for e in r["results"]), (q, r["results"]))
+
+    def test_search_beginplay_friendly_alias(self):
+        """v6.5.5：BeginPlay 必须命中 ReceiveBeginPlay（事件前缀归一）。"""
+        self._new_bp()
+        for q in ("BeginPlay", "beginplay", "ActorBeginOverlap"):
+            expected = ("ReceiveActorBeginOverlap" if q.lower().startswith("actor")
+                        else "ReceiveBeginPlay")
+            r = self._cmd("search_blueprint_nodes",
+                          bp_path="/Game/Test/BP_GraphApply",
+                          query=q).json()["result"]
+            self.assertTrue(any(e["target"] == expected for e in r["results"]),
+                            (q, r["results"]))
+        # 反向保护：短查询不能命中 Blueprint*
+        r = self._cmd("search_blueprint_nodes",
+                      bp_path="/Game/Test/BP_GraphApply",
+                      query="print").json()["result"]
+        self.assertFalse(any(e["target"].lower().startswith("blueprint")
+                             for e in r["results"]), r["results"])
 
     def test_search_pin_signature_complete(self):
         """可给签名的源 → 每条引脚五字段齐全；引擎库候选如实缺省 + 说明。"""
@@ -182,13 +213,17 @@ class TestSearchBlueprintNodes(_Base):
                 self.assertIn(key, p, p)
         self.assertEqual(pins[1]["type"], "float")
         self.assertEqual(pins[1]["default_hint"], "0.2")
-        # 引擎库候选：签名如实空 + 显式说明（绝不假装给全）
-        eng_hits = [e for e in r["results"] if e["source"] == "engine_class"]
+        # 引擎库候选：签名如实缺省 + 显式说明；v6.5.5 静态目录可带完整签名
+        eng_hits = [e for e in r["results"]
+                    if e["source"] in ("engine_class", "engine_catalog")]
         self.assertTrue(eng_hits, r["results"])
         for e in eng_hits:
-            self.assertEqual(e["pins"], [])
             self.assertTrue(e.get("pins_note"), e)
             self.assertEqual(e["class"], "KismetSystemLibrary")
+            if e["source"] == "engine_class":
+                self.assertEqual(e["pins"], [])
+            else:
+                self.assertTrue(e["pins"], e)
         # 流程控制目录条目签名完整（Branch 四引脚）
         r = self._cmd("search_blueprint_nodes", bp_path="/Game/Test/BP_GraphApply",
                       query="branch").json()["result"]

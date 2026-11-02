@@ -1,14 +1,14 @@
 {
   "manifest_version": 1,
-  "generated_at": "2026-10-28 18:30:00",
+  "generated_at": "2026-11-02 17:00:00",
   "mode": "release",
   "with_tests": false,
   "path_base": "source_root/dest_root are relative to workspace root; bridge.src_files are relative to release package root (dest_root)",
   "source_root": "skills/ue5-automation",
   "dest_root": "ue5-automation-skill-package",
-  "skill_version": "v1.14.0",
-  "package_version": "v6.5.4",
-  "release_date": "2026-10-28",
+  "skill_version": "v6.5.10",
+  "package_version": "v6.5.5",
+  "release_date": "2026-11-02",
   "root_sync": {
     "setup.py": "synced(from source)",
     "install_dependencies.bat": "synced(from source)",
@@ -570,8 +570,8 @@
     "note": "bridge unique source; MD5 recorded, no copy (excluded *.bak*/*.pdb/internal docs)"
   },
   "readme_inject": {
-    "package_version": "v6.5.4",
-    "skill_version": "v1.14.0"
+    "package_version": "v6.5.5",
+    "skill_version": "v6.5.10"
   },
   "excluded": [
     "output/BlueprintPythonBridge (legacy delivery, not in new flow)"

@@ -2,6 +2,21 @@
 
 以下为主要变化摘要。
 
+## [6.5.5] — 2026-11-02（搜索修复 + 启动幂等 + 自检脚本 · skill 6.5.10）
+
+- **节点搜索**：`search_blueprint_nodes` 内置 `PrintString` / `Delay` 目录；
+  `BeginPlay` 正确命中 `ReceiveBeginPlay`；`Print` 不再返回一批 `Blueprint*`。
+  引擎类结果保留短 `class` 并新增完整 `class_path`。
+- **重复启动**：`start()` 增加跨模块启动锁与 5 秒端口宽限，消除重复加载时的
+  `[Errno 10048]` 双自启；异常路径释放锁，允许下次重试。
+- **PIE 生成边界**：UE 5.1 的生成函数标记 `BlueprintInternalUseOnly`，Python
+  未导出入口；`spawn_actor(world="pie")` 改为明确报错并给出替代路径，不再静默
+  返回 `None`。
+- **自检脚本**：Skill 包新增 `scripts/doctor.py`（token/health/版本/项目路径）
+  与 `scripts/smoke.py`（建图→搜索→写图→编译→读回→保存，可重复运行）。
+- **验证**：离线 `846 passed / 95 skipped / 0 failed`；UE 5.1.1 + `TP_BlankBP`
+  实机 doctor/smoke 连续通过。
+
 ## [6.5.4] — 2026-10-28（合规补丁 + 发布同步）
 
 - **合规补齐**：移植包根目录随附 `LICENSE`（Apache-2.0）与

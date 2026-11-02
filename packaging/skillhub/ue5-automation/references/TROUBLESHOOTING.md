@@ -109,13 +109,18 @@
 
 ## 18. `search_blueprint_nodes` 搜不到 `PrintString` / `Delay`
 
+> **6.5.5 已修复：** `PrintString` / `Delay` 已加入内置目录；`print` 不再命中
+> `Blueprint*`。若仍搜不到，按下面的兜底路径处理。
+
 - 搜索对图内节点、蓝图自有函数/变量、流程/事件目录可靠；引擎函数库（如
   `KismetSystemLibrary`）在当前 Python 包装里可能枚举不到。
-- `Query:"Print"` 还会命中 `Blueprint*`（子串包含 `print`），结果看起来不相关。
 - 搜不到不代表函数不存在：直接用完整类路径写 `apply_graph`，写后 `read_nodes`
   看实际引脚。引擎函数用精确名 + 完整类路径最稳。
 
 ## 19. 日志出现 `[Errno 10048]` 但 `/health` 正常
+
+> **6.5.5 已修复：** `start()` 增加跨模块启动锁与 5 秒端口宽限，重复入口不再
+> 绑定同一端口。若仍看到，说明运行的是旧运行包，先确认版本。
 
 - 说明有两个自启入口（bootstrap 插件 + 项目 `Content/Python/init_unreal.py`）；
   第一个已经占用 8889，第二个绑定失败并打印 `service stopped`。
@@ -142,7 +147,7 @@
 
 ## 22. 找不到 `install.bat`
 
-- v6.5.4 portable 包的安装脚本在 `tools\install.bat`，不在包根目录。
+- v6.5.5 portable 包的安装脚本在 `tools\install.bat`，不在包根目录。
 - 也可以直接跑部署脚本：
 
 ```bat

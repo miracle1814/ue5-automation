@@ -4,8 +4,8 @@
 > undo it, audit it.** Apache-2.0. Windows. Chinese docs remain the primary
 > entry (`README.zh-CN.md`).
 
-**Download v6.5.4:** [portable package](https://github.com/miracle1814/ue5-automation/releases/download/v6.5.4/ue5-automation-v6.5.4-portable.zip) ·
-[release notes](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.4) ·
+**Download v6.5.5:** [portable package](https://github.com/miracle1814/ue5-automation/releases/download/v6.5.5/ue5-automation-v6.5.5-portable.zip) ·
+[release notes](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.5) ·
 [SkillHub listing](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
 
 ## What it is
@@ -52,7 +52,7 @@ python benchmark/run_offline.py   # tests, no UE required
 python benchmark/live_smoke.py    # read-only checks against a running editor
 ```
 
-Baseline v6.5: **820 passed / 95 skipped / 0 failed** offline;
+Baseline v6.5.5: **846 passed / 95 skipped / 0 failed** offline;
 **34 MCP tools / 101 whitelisted commands** on UE 5.1.1 and 5.8.2.
 
 ## Engines

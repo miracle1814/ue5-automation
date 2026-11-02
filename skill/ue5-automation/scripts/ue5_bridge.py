@@ -5719,8 +5719,45 @@ def _cmd_spawn_actor(actor_class: str, location=None, rotation=None,
         if wname == "pie":
             gs = getattr(u, "GameplayStatics", None)
             fn = getattr(gs, "begin_spawn_actor_from_class", None) if gs else None
-            if callable(fn):
-                spawned = fn(w, cls, vec, rot)
+            if not callable(fn):
+                # 实测 UE 5.1：BeginSpawningActorFromClass 标记
+                # BlueprintInternalUseOnly，Python 未导出任何生成入口。
+                # 与其静默返回 None，不如明确告知可行的替代路径。
+                raise BridgeError(
+                    "当前 UE 的 Python API 未导出 GameplayStatics 生成接口"
+                    "（UE 5.1 的生成函数为 BlueprintInternalUseOnly）。"
+                    "请在编辑器世界生成（world='editor'），"
+                    "或先把 Actor 放入关卡再启动 PIE。",
+                    category="actor_spawn")
+            # v6.5.5：World 对象不一定能直接作为 WorldContext；
+            # 依次尝试 World → PlayerController → GameInstance，避免直接返回 None。
+            contexts = [w]
+            try:
+                pc = gs.get_player_controller(w, 0)
+                if pc is not None:
+                    contexts.append(pc)
+            except Exception:
+                pass
+            try:
+                gi = gs.get_game_instance(w)
+                if gi is not None:
+                    contexts.append(gi)
+            except Exception:
+                pass
+            for ctx in contexts:
+                if ctx is None:
+                    continue
+                try:
+                    spawned = fn(ctx, cls, vec, rot)
+                except Exception:
+                    spawned = None
+                if spawned is not None:
+                    break
+            if spawned is None:
+                raise BridgeError(
+                    "PIE 世界生成失败：请先把 Actor 放到编辑器世界，再启动 PIE；"
+                    "或确认 PIE/Simulate 正在运行",
+                    category="actor_spawn")
         if spawned is None:
             lib, _n = _ue_ell()
             fn = getattr(lib, "spawn_actor_from_class", None)
@@ -7846,6 +7883,47 @@ _GRAPH_SEARCH_LIMIT_MAX = 50
 #: 引擎函数库候选目录（search 默认枚举的 Python 包装类；父类自动加入）
 _GRAPH_SEARCH_LIBRARIES = ("KismetSystemLibrary", "GameplayStatics")
 
+#: v6.5.5：常用引擎函数静态目录（UE 5.1 的 Python 包装不暴露 KismetSystemLibrary
+#: 的全部 UFUNCTION，dir() 枚举不到 PrintString/Delay；这里补确定性条目）。
+_ENGINE_FUNCTION_CATALOG = {
+    "PrintString": {
+        "class": "/Script/Engine.KismetSystemLibrary",
+        "pins": [
+            {"name": "execute", "type": "exec", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": ""},
+            {"name": "then", "type": "exec", "direction": "EGPD_Output",
+             "is_delegate": False, "default_hint": ""},
+            {"name": "WorldContextObject", "type": "object", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": ""},
+            {"name": "InString", "type": "string", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": ""},
+            {"name": "bPrintToScreen", "type": "bool", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": "true"},
+            {"name": "bPrintToLog", "type": "bool", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": "true"},
+            {"name": "TextColor", "type": "struct", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": ""},
+            {"name": "Duration", "type": "float", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": "2.0"},
+            {"name": "Key", "type": "string", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": ""},
+        ],
+    },
+    "Delay": {
+        "class": "/Script/Engine.KismetSystemLibrary",
+        "pins": [
+            {"name": "execute", "type": "exec", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": ""},
+            {"name": "then", "type": "exec", "direction": "EGPD_Output",
+             "is_delegate": False, "default_hint": ""},
+            {"name": "Duration", "type": "float", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": "0.2"},
+            {"name": "LatentInfo", "type": "struct", "direction": "EGPD_Input",
+             "is_delegate": False, "default_hint": ""},
+        ],
+    },
+}
+
 #: 流程控制节点目录（kind="flow" 的合法 target）。via=macro 走 add_macro_node
 #: （fake_unreal 同名集合同口径），via=node_by_class 走 add_node_by_class
 #: （Branch 不是宏，是 K2Node_IfThenElse）。pins = (name, direction, type, hint)。
@@ -8021,7 +8099,26 @@ def _cmd_search_blueprint_nodes(bp_path: str, query: str = "",
     results: List[dict] = []
 
     def _match(*names) -> bool:
-        return not ql or any(ql in str(n or "").lower() for n in names)
+        if not ql:
+            return True
+        for n in names:
+            s = str(n or "").strip()
+            if not s:
+                continue
+            low = s.lower()
+            if low == ql or low.startswith(ql):
+                return True
+            # v6.5.5：事件友好别名（BeginPlay → ReceiveBeginPlay）
+            for prefix in ("receive", "event", "on"):
+                if low.startswith(prefix) and low[len(prefix):].startswith(ql):
+                    return True
+            # v6.5.5：按 camel/snake 词元匹配。
+            # 既保留 Tick → ReceiveTick 的友好别名，也避免 Print → Blueprint...
+            spaced = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", s)
+            tokens = [t.lower() for t in re.split(r"[_\s]+", spaced) if t]
+            if ql in tokens:
+                return True
+        return False
 
     # ── ① 图内已有节点（签名最可信：引擎真实引脚面）───────────────────
     try:
@@ -8149,7 +8246,22 @@ def _cmd_search_blueprint_nodes(bp_path: str, query: str = "",
                      for p in meta["pins"]],
         })
 
-    # ── ⑥ 父类函数 / 函数库候选（dir() 枚举；签名如实缺省）────────────
+    # ── ⑥ 常用引擎函数静态目录（v6.5.5：补 dir() 枚举不到的 KismetSystemLibrary）
+    _static_names = set()
+    for target, meta in _ENGINE_FUNCTION_CATALOG.items():
+        if not _match(target):
+            continue
+        _static_names.add(target)
+        results.append({
+            "kind": "function", "node_class": "K2Node_CallFunction",
+            "target": target, "source": "engine_catalog",
+            "class": meta["class"].rsplit(".", 1)[-1],
+            "class_path": meta["class"],
+            "pins": list(meta["pins"]),
+            "pins_note": "静态目录（v6.5.5）；写入后 read_nodes 复核实际引脚",
+        })
+
+    # ── ⑦ 父类函数 / 函数库候选（dir() 枚举；签名如实缺省）────────────
     candidates: List[str] = list(_GRAPH_SEARCH_LIBRARIES)
     try:
         parent = str(bp.generated_class().get_super_class().get_name())
@@ -8178,10 +8290,16 @@ def _cmd_search_blueprint_nodes(bp_path: str, query: str = "",
             camel = _snake_to_camel(attr)
             if not _match(attr, camel):
                 continue
+            if camel in _static_names:
+                # v6.5.5：静态目录已给出更完整的签名，避免重复条目
+                continue
             results.append({
                 "kind": "function", "node_class": "K2Node_CallFunction",
                 "target": camel, "source": "engine_class",
-                "class": cls_name, "pins": [],
+                "class": cls_name,
+                "class_path": ("/Script/Engine." + cls_name)
+                              if cls_name in _GRAPH_SEARCH_LIBRARIES else cls_name,
+                "pins": [],
                 "pins_note": _GRAPH_SEARCH_ENGINE_PINS_NOTE,
             })
 
@@ -13275,6 +13393,89 @@ _server_thread = getattr(sys.modules.get(__name__), '_server_thread', None)
 _uvicorn_server = getattr(sys.modules.get(__name__), '_uvicorn_server', None)
 _server_running = getattr(sys.modules.get(__name__), '_server_running', False)
 _atexit_registered = getattr(sys.modules.get(__name__), '_atexit_registered', False)
+_server_port = getattr(sys.modules.get(__name__), '_server_port', 8889)
+
+
+def _start_lock_path(port: int) -> str:
+    base = os.environ.get("APPDATA") or tempfile.gettempdir()
+    return os.path.join(base, "ue5_bridge", "server-%d.lock" % int(port))
+
+
+def _try_acquire_start_lock(port: int) -> bool:
+    """v6.5.5：跨模块实例的启动锁。
+
+    两个 init 入口（bootstrap 插件 + 项目 Content/Python）会各自 import 本模块，
+    产生两个模块实例；仅靠模块级 `_server_running` 挡不住，端口预检又有竞态，
+    第二个实例仍会 bind 失败并打印 10048。这里用文件锁 + 端口探测：
+    - 锁存在且端口已监听 → 已有实例，返回 False；
+    - 锁存在但端口未监听 → 视为陈旧锁，清掉重试一次；
+    - 文件系统异常 → fail-open，仍由端口预检兜底。
+    """
+    import socket as _socket
+
+    path = _start_lock_path(port)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+    except Exception:
+        pass
+
+    def _port_open() -> bool:
+        s = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+        s.settimeout(0.3)
+        try:
+            s.connect(("127.0.0.1", int(port)))
+            return True
+        except Exception:
+            return False
+        finally:
+            try:
+                s.close()
+            except Exception:
+                pass
+
+    def _create() -> bool:
+        try:
+            fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            return False
+        except Exception:
+            return True  # fail-open
+        try:
+            os.write(fd, str(os.getpid()).encode("ascii", "ignore"))
+        finally:
+            try:
+                os.close(fd)
+            except Exception:
+                pass
+        return True
+
+    if _create():
+        return True
+    # 锁已存在：给持有者一个绑定窗口（uvicorn 启动通常 <1s）。
+    # 期间端口一旦监听 → 复用现有实例；5s 后仍未监听才按陈旧锁处理。
+    deadline = time.time() + 5.0
+    while time.time() < deadline:
+        if _port_open():
+            return False
+        time.sleep(0.1)
+    try:
+        os.remove(path)
+    except Exception:
+        pass
+    if _create():
+        return True
+    return not _port_open()
+
+
+def _release_start_lock(port: int) -> None:
+    path = _start_lock_path(port)
+    try:
+        with open(path, "r", encoding="ascii") as f:
+            owner = f.read().strip()
+        if owner == str(os.getpid()):
+            os.remove(path)
+    except Exception:
+        pass
 
 
 # ══════════════════════════════════════════════════════════
@@ -15486,7 +15687,7 @@ def start(port: int = None, host: str = "127.0.0.1"):
         port: HTTP 监听端口，默认从环境变量 UE5_BRIDGE_PORT 读取（回退 8889）
         host: 监听地址，默认 127.0.0.1
     """
-    global _server_thread, _uvicorn_server
+    global _server_thread, _uvicorn_server, _server_port
     if _server_running:
         print("[ue5_bridge] [WARN] 服务已在运行")
         return
@@ -15499,6 +15700,11 @@ def start(port: int = None, host: str = "127.0.0.1"):
     if port is None:
         port = int(os.environ.get("UE5_BRIDGE_PORT", "8889"))
 
+    _server_port = port
+    if not _try_acquire_start_lock(port):
+        print("[ue5_bridge] [OK] 服务已由另一个入口启动（复用现有实例，跳过重复绑定）")
+        return
+
     # 🔧 T-20260805-STOP-FIX：检测端口是否被旧 server 占（reload 后旧 server 还活着）
     # 若端口已占 → 提示用户先用 stop()（或重启 UE）才能 reload
     import socket as _socket
@@ -15509,6 +15715,7 @@ def start(port: int = None, host: str = "127.0.0.1"):
         _s.close()
         print(f"[ue5_bridge] [WARN] 端口 {port} 已被旧 server 占用 — 请先 stop() 或重启 UE 编辑器")
         print(f"[ue5_bridge] [WARN] 修复方法：在 UE Python Console 执行 stop() + start()（需停掉旧 server）")
+        _release_start_lock(port)
         return
     except Exception:
         pass  # 端口空闲，正常启动
@@ -15519,6 +15726,7 @@ def start(port: int = None, host: str = "127.0.0.1"):
     # v0.5 安全修复：禁止非 localhost 绑定
     if host not in ("127.0.0.1", "localhost"):
         print(f"[ue5_bridge] [SEC] 安全限制：仅允许 127.0.0.1 绑定，拒绝 host={host}")
+        _release_start_lock(port)
         return
 
     config = uvicorn.Config(
@@ -15551,6 +15759,8 @@ def start(port: int = None, host: str = "127.0.0.1"):
             server.run()
         except Exception as e:
             print(f"[ue5_bridge] [FAIL] 服务异常: {e}")
+        finally:
+            _release_start_lock(port)
 
     # 🔧 T-20260805-CRASH-FIX：daemon=False + atexit.register(stop)
     #   根因：daemon=True 时 UE 关闭时 Python 解释器直接强杀 uvicorn 线程，
@@ -15626,6 +15836,7 @@ def stop():
         _server_running = False
         _server_thread = None
         _uvicorn_server = None
+        _release_start_lock(_server_port)
         print("[ue5_bridge] 服务已停止")
 
 

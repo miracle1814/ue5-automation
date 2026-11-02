@@ -15,17 +15,34 @@
 | `references/TROUBLESHOOTING.md` | 常见故障排查 |
 | `references/SECURITY.md` | 安全模型与授权边界 |
 | `references/VERIFICATION.md` | 验证记录与已知边界 |
+| `scripts/doctor.py` | 安装后体检：token / health / bridge 版本 / 项目路径 |
+| `scripts/smoke.py` | 5 分钟主路径冒烟（会创建/替换 `/Game/Test/BP_Smoke`） |
 
 ## 版本对应
 
 | 项 | 版本 |
 |---|---|
-| Skill 包 | **6.5.9** |
-| 运行包（插件 + bridge） | **6.5.4** |
+| Skill 包 | **6.5.10** |
+| 运行包（插件 + bridge） | **6.5.5** |
 | 适用引擎 | UE 5.1.x 开箱；5.8.x 预编译；5.2–5.7 需重编译 |
 
-> 6.5.9 是**实机冒烟后的可用性修订**，不改变运行时行为。安装、命令、安全模型
-> 与 6.5.4 完全一致；`VERIFICATION.md` 新增 UE 5.1.1 实机记录。
+> 6.5.10 对应运行包 6.5.5：修复节点搜索的 `KismetSystemLibrary` 目录、
+> `BeginPlay` 友好名匹配与 `Print` 噪声，修复重复启动的 10048 端口占用，
+> 并新增 `doctor.py` / `smoke.py` 安装后自检。
+
+## 6.5.10 改了什么
+
+- 运行包 6.5.5：`search_blueprint_nodes` 内置 `PrintString` / `Delay` 目录，
+  `Print` 不再命中一堆 `Blueprint*`；`BeginPlay` 可正确命中 `ReceiveBeginPlay`。
+- 运行包 6.5.5：`start()` 增加跨模块启动锁与 5 秒端口宽限，重复加载不再刷
+  10048 双自启；锁异常时释放，允许下次重试。
+- 运行包 6.5.5：PIE 世界 `spawn_actor` 在 UE 5.1 的 Python API 未导出生成接口时
+  明确报错并给出替代路径，不再静默返回 `None`。
+- Skill 6.5.10：新增 `scripts/doctor.py` 与 `scripts/smoke.py`，只依赖标准库；
+  `smoke.py` 可重复运行（已存在 `/Game/Test/BP_Smoke` 时删除重建）。
+- 实测：UE 5.1.1 + `TP_BlankBP`，doctor 全绿；smoke 连续两次全绿
+  （`verified=true`、`compiled=true`、读回 `Hello from skill smoke`、`saved=true`）。
+- 6.5.9 的文档修订与 6.5.8/6.5.7/6.5.6/6.5.5 的结构改动保留。
 
 ## 6.5.9 改了什么
 
@@ -48,7 +65,7 @@
 见 `references/INSTALL-WINDOWS.md`。最短路径：
 
 1. 下载与运行包版本匹配的 portable 包：
-   `https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.4`
+   `https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.5`
 2. 解压后运行 `install.bat`，把项目 `.uproject` 拖进窗口。
 3. 重启 UE 编辑器，Output Log 出现 `[ue5_bridge] [OK] 服务已在后台启动`。
 4. MCP 连接 `http://127.0.0.1:8889/mcp`，请求头带 `X-Skill-Token`。

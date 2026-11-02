@@ -47,9 +47,8 @@ L2 结果在 `result.l2.graphs[]`，每个图有 `nodes[]` 和 `connections[]`�
 ```
 
 确认事件候选可用。`search_blueprint_nodes` 对图内节点、蓝图自有函数/变量、
-流程/事件目录可靠；引擎函数库（如 `KismetSystemLibrary`）在当前 Python 包装里
-可能枚举不到，`PrintString` 搜不到不代表不存在。直接写完整类路径，写后
-`read_nodes` 看实际引脚。
+流程/事件目录可靠；6.5.5 起 `PrintString` / `Delay` 也有内置目录。若仍枚举不到，
+直接写完整类路径，写后 `read_nodes` 看实际引脚。
 
 ### 2.3 整图写入
 
