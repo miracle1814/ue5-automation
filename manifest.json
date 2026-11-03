@@ -6,7 +6,7 @@
   "path_base": "source_root/dest_root are relative to workspace root; bridge.src_files are relative to release package root (dest_root)",
   "source_root": "skills/ue5-automation",
   "dest_root": "ue5-automation-skill-package",
-  "skill_version": "v6.5.10",
+  "skill_version": "v6.5.11",
   "package_version": "v6.5.5",
   "release_date": "2026-11-02",
   "root_sync": {
@@ -16,8 +16,8 @@
   },
   "skill_section": {
     "path": "skill/ue5-automation",
-    "file_count": 83,
-    "total_bytes": 3171986,
+    "file_count": 84,
+    "total_bytes": 2219699,
     "files": [
       {
         "path": "API_REFERENCE.md",
@@ -31,8 +31,8 @@
       },
       {
         "path": "SKILL.md",
-        "bytes": 38039,
-        "md5": "DAA266B071FCD68F718AEE1A57DACCBC"
+        "bytes": 38073,
+        "md5": "D938C03E544720E66B4796F3A7542CC5"
       },
       {
         "path": "UE_VERSION_GUIDE.md",
@@ -61,8 +61,8 @@
       },
       {
         "path": "docs/CROSS-VALIDATION-v6.5.md",
-        "bytes": 3536,
-        "md5": "C53F9D8F9B2AC8427EBBE25FF282E029"
+        "bytes": 3463,
+        "md5": "B9D66570CF3C7EAEED06734DEBCA9D34"
       },
       {
         "path": "docs/DELIVERY-v6.5.md",
@@ -71,8 +71,8 @@
       },
       {
         "path": "docs/ENVIRONMENT-v6.5.md",
-        "bytes": 1680,
-        "md5": "7901AC55F68E37F1B7E71437A8642EEB"
+        "bytes": 1627,
+        "md5": "B4BCDC89C945CA36AF753B5A59590D27"
       },
       {
         "path": "docs/L2-COMMANDS.md",
@@ -86,8 +86,8 @@
       },
       {
         "path": "docs/MERGE-v6.5-已优化版本A.md",
-        "bytes": 6317,
-        "md5": "28237A54466D55D1994608EB6890C962"
+        "bytes": 6212,
+        "md5": "523420A2936EB403991EECF72A3A0801"
       },
       {
         "path": "docs/PLAN-AUDIT-v4.4.md",
@@ -131,8 +131,8 @@
       },
       {
         "path": "docs/RELEASE-v6.5-多Agent与稳定性.md",
-        "bytes": 2487,
-        "md5": "230DF9F15FB5825BA44B1BE94BFA9647"
+        "bytes": 2442,
+        "md5": "9500A4C36EEB5984812B7A8098C4B8FB"
       },
       {
         "path": "docs/ROADMAP-v4.1.md",
@@ -246,8 +246,8 @@
       },
       {
         "path": "logs/blueprint_editor.jsonl",
-        "bytes": 985039,
-        "md5": "DC83CEFE9BE14421AD7A5B5E7EFCD681"
+        "bytes": 14800,
+        "md5": "091BAC8F10D257813AADD5FDF54DA3DA"
       },
       {
         "path": "reader_schema.md",
@@ -266,8 +266,8 @@
       },
       {
         "path": "scripts/README.md",
-        "bytes": 6331,
-        "md5": "71BFD1C6AF989CFE615328E2A0788770"
+        "bytes": 6887,
+        "md5": "4B0F1012DD5F583C1938CA57DBFFE758"
       },
       {
         "path": "scripts/analyzer.py",
@@ -295,14 +295,19 @@
         "md5": "21931A6B27CB21F3CE184708E800F6F5"
       },
       {
+        "path": "scripts/bridge_client.py",
+        "bytes": 7100,
+        "md5": "A3EA35544C3E688560B14997B2886735"
+      },
+      {
         "path": "scripts/check_ue_version.py",
         "bytes": 16006,
         "md5": "21FD2EA29741E2D9A7F1ED471D4928E7"
       },
       {
         "path": "scripts/doctor.py",
-        "bytes": 3311,
-        "md5": "3F2AAB40D91793BED8756E68D48973E4"
+        "bytes": 3112,
+        "md5": "9B8363CC3124BB281ADE17D3D760698C"
       },
       {
         "path": "scripts/fake_unreal.py",
@@ -351,8 +356,8 @@
       },
       {
         "path": "scripts/smoke.py",
-        "bytes": 7076,
-        "md5": "0624C10A4B49231E5454C0B2B4091EAB"
+        "bytes": 7427,
+        "md5": "053131A4720534D380EAEBE4520A98AA"
       },
       {
         "path": "scripts/task_cleanup.py",
@@ -371,8 +376,8 @@
       },
       {
         "path": "scripts/ue5_bridge.py",
-        "bytes": 766148,
-        "md5": "3955A7F5DD11F1A3E2B8973EDD6EB00A"
+        "bytes": 774871,
+        "md5": "DC8241ACEA57EDEA4993E6BAF10BFBDD"
       },
       {
         "path": "scripts/ue5_mcp_stdio.py",
@@ -426,8 +431,8 @@
       },
       {
         "path": "ui/index.html",
-        "bytes": 84545,
-        "md5": "F90CD9DA70E79C07B33C3A5FE9D168F1"
+        "bytes": 86208,
+        "md5": "4334B41F221B21DD7FE3D6F7F3697F52"
       },
       {
         "path": "workflow.md",
@@ -581,7 +586,7 @@
   },
   "readme_inject": {
     "package_version": "v6.5.5",
-    "skill_version": "v6.5.10"
+    "skill_version": "v6.5.11"
   },
   "excluded": [
     "output/BlueprintPythonBridge (legacy delivery, not in new flow)"

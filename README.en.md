@@ -52,7 +52,7 @@ python benchmark/run_offline.py   # tests, no UE required
 python benchmark/live_smoke.py    # read-only checks against a running editor
 ```
 
-Baseline v6.5.5: **846 passed / 95 skipped / 0 failed** offline;
+Baseline v6.5.5: **852 passed / 95 skipped / 0 failed** offline;
 **34 MCP tools / 101 whitelisted commands** on UE 5.1.1 and 5.8.2.
 
 ## Engines

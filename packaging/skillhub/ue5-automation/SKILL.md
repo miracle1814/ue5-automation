@@ -2,7 +2,7 @@
 slug: ue5-automation
 name: ue5-automation
 displayName: UE5 蓝图自动化
-version: 6.5.10
+version: 6.5.11
 runtime_version: 6.5.5
 summary: 让 AI 直接读写 UE5 蓝图节点、做编译诊断与 PIE 行为验证；Windows + UE 5.1/5.8。
 description: UE5 蓝图自动化操作规范（ue_automation / UE 自动化 / Unreal 自动化 / 蓝图自动化）：面向虚幻引擎（Unreal Engine 5 / UE5）的 Blueprint Automation，先读后写、整图事务、读回验证、编译诊断、PIE 行为验证、任务级撤销与多 Agent 协作。适用于已安装 ue5-automation bridge/MCP 的 UE5 工程；不适用于 C++ 代码生成、打包发布或纯美术制作。Windows + UE 5.1/5.8。本地 bridge 使用本机 token，无需外部 API Key。
@@ -37,9 +37,9 @@ tags:
 - 失败时诚实报错，不把“命令返回 200”当成“蓝图已改对”；
 - 多 Agent 并发时用幂等键/资产锁避免互相踩踏。
 
-> **版本对应：** Skill 包 `6.5.10` ↔ 运行包 `6.5.5`。本次运行包同步修复搜索与重复启动，并新增安装后自检脚本。
+> **版本对应：** Skill 包 `6.5.11` ↔ 运行包 `6.5.5`。本版按评测反馈统一自检脚本的 health 解析，补充重试与结构化错误；运行包不变。
 
-![UE5 蓝图自动化工作流总览](https://skillhub-1388575217.cos.accelerate.myqcloud.com/skill-overview-images/uploads/805989/8b223d62ca6e44479a3ec378d4d84de0.png)
+![UE5 蓝图自动化工作流总览](https://skillhub-1388575217.cos.accelerate.myqcloud.com/skill-overview-images/uploads/805989/0f3fc16a47894a9393c38c91c003d44a.png)
 
 > 读 → 写 → 编译 → 验证 → 收尾；`verified=true` 才算通过。
 
@@ -161,15 +161,18 @@ Gameplay、蓝图自动化、UE 编辑器。
 如果 `health` / `ue5_check_health` 不可用，**不要假装工具已连接**；先让用户按
 `references/INSTALL-WINDOWS.md` 安装运行包并启动编辑器。
 
-## 安装后自检（6.5.10）
+## 安装后自检（6.5.11）
 
 本 Skill 包随附两个只依赖 Python 标准库的脚本（无需 `requests`）：
 
 ```bash
 python scripts/doctor.py    # token / health / bridge_loaded / 版本 / 项目路径
 python scripts/smoke.py     # 5 分钟主路径：建图 → 搜索 → 整图写入 → 编译 → 读回 → 保存
+python scripts/doctor.py --retries 3   # 连接失败或 5xx 时重试（默认 2 次）
 ```
 
+`doctor.py` 与 `smoke.py` 共用 `scripts/bridge_client.py`，两种 health 返回结构按同一口径解析；
+失败时输出 `code` / `message` / `hint`。
 `smoke.py` 会创建/替换 `/Game/Test/BP_Smoke`（重复运行会先删除再重建），
 不会自动清理；详见 `scripts/README.md`。
 

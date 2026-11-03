@@ -15,6 +15,7 @@
 | `references/TROUBLESHOOTING.md` | 常见故障排查 |
 | `references/SECURITY.md` | 安全模型与授权边界 |
 | `references/VERIFICATION.md` | 验证记录与已知边界 |
+| `scripts/bridge_client.py` | doctor / smoke 共用的 bridge 客户端：health 归一化、重试、结构化错误 |
 | `scripts/doctor.py` | 安装后体检：token / health / bridge 版本 / 项目路径 |
 | `scripts/smoke.py` | 5 分钟主路径冒烟（会创建/替换 `/Game/Test/BP_Smoke`） |
 
@@ -22,13 +23,25 @@
 
 | 项 | 版本 |
 |---|---|
-| Skill 包 | **6.5.10** |
+| Skill 包 | **6.5.11** |
 | 运行包（插件 + bridge） | **6.5.5** |
 | 适用引擎 | UE 5.1.x 开箱；5.8.x 预编译；5.2–5.7 需重编译 |
 
-> 6.5.10 对应运行包 6.5.5：修复节点搜索的 `KismetSystemLibrary` 目录、
-> `BeginPlay` 友好名匹配与 `Print` 噪声，修复重复启动的 10048 端口占用，
-> 并新增 `doctor.py` / `smoke.py` 安装后自检。
+> 6.5.11 是**评测反馈修复版**，运行包仍为 6.5.5：统一 `doctor.py` / `smoke.py`
+> 的 health 解析，补充连接重试与结构化错误，并把验证记录改为“本轮实测在前、
+> 历史数据明确标注”。
+
+## 6.5.11 改了什么
+
+- 新增 `scripts/bridge_client.py`：同时兼容 `/health` 的嵌套 `ue_info` 与
+  `/command health` 的顶层字段，doctor / smoke 不再各写一套解析。
+- 自检脚本默认 `--retries 2`（最多 3 次尝试）：仅对连接失败和 HTTP 5xx 重试；
+  401/403 立即失败，避免错误 token 空转。
+- 失败输出统一为 `code` / `message` / `hint` / `http_status`；`--json` 同样包含
+  这些字段，便于 CI 消费。
+- `VERIFICATION.md` 分层：6.5.11 本轮实测在前；6.5.4 的 5.8 / 历史数据明确标为
+  历史记录，不再混入当前版本结论。
+- 运行包 6.5.5 不改；6.5.10 的搜索修复、启动幂等与自检脚本保留。
 
 ## 6.5.10 改了什么
 

@@ -17,7 +17,7 @@ No compilation for 5.1 & 5.8 (prebuilt bridge DLLs included).
 
 **Download v6.5.5:** [portable package](https://github.com/miracle1814/ue5-automation/releases/download/v6.5.5/ue5-automation-v6.5.5-portable.zip) · [release notes](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.5) · [SkillHub listing](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
 
-> The SkillHub skill package is at **6.5.10** (runtime **6.5.5**): search fixes, idempotent start, and `doctor.py` / `smoke.py` self-checks.
+> The SkillHub skill package is at **6.5.11** (runtime **6.5.5**): self-check reliability fixes, unified health parsing, retries and structured errors.
 
 ![UE5 Blueprint Automation workflow](docs/assets/skillhub-overview.png)
 *Read → write → compile → verify → save/undo. `verified=true` is the gate.*
@@ -236,7 +236,7 @@ The core is Apache-2.0. Paid work is available for enterprise integration, UE 5.
 ## Status & tested-against
 
 - Actively maintained — monthly releases, per-release changelog, CI on every push
-- Offline regression: **846 passed / 0 failed** (95 skipped = online-only tests that need a live editor)
+- Offline regression: **852 passed / 0 failed** (95 skipped = online-only tests that need a live editor)
 - Live end-to-end verified on **UE 5.1.1** and **UE 5.8.2** (editor → official MCP →
   toolset → C++ bridge → live PIE state)
 - See [CHANGELOG.md](CHANGELOG.md) for per-release summaries

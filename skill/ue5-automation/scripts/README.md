@@ -145,6 +145,15 @@ python init.py --api-base <url>         # 覆盖 agent API 地址（默认 local
 
 即：`publish.py` 负责把 `init.py` **装到部署包**，`init.py` 负责在新机器上**完成初始化**。
 
+## 安装后自检（6.5.11）
+
+- `bridge_client.py`：doctor / smoke 共用；统一 `/health`（嵌套 `ue_info`）与
+  `/command health`（顶层字段）的解析，并对连接失败 / HTTP 5xx 做有限重试。
+- `doctor.py`：token、health、`bridge_loaded`、bridge 版本、项目路径。
+- `smoke.py`：建图 → 搜索 → 整图写入 → 编译 → 读回 → 保存；可重复运行
+  （已存在 `/Game/Test/BP_Smoke` 时删除重建）。
+- 两个脚本都支持 `--json`、`--retries`；失败输出 `code` / `message` / `hint`。
+
 ## 历史说明
 
 v0.3 之前的 v1 版本曾尝试用纯 ue_send 通道（不走 HTTP），

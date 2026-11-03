@@ -2,6 +2,18 @@
 
 以下为主要变化摘要。
 
+## [6.5.11] — 2026-11-03（评测反馈修复 · skill 6.5.11）
+
+- **自检一致性**：新增 `scripts/bridge_client.py`，doctor / smoke 共用
+  `normalize_health()`，同时兼容 `/health` 的嵌套 `ue_info` 与 `/command health`
+  的顶层字段。
+- **重试与错误**：默认 `--retries 2`，仅重试连接失败和 HTTP 5xx；401/403 立即
+  失败；错误统一为 `code` / `message` / `hint` / `http_status`。
+- **验证记录**：`VERIFICATION.md` 改为本轮实测在前，6.5.4/5.8 数据明确标为历史，
+  不再作为当前版本依据。
+- **验证**：离线 `852 passed / 95 skipped / 0 failed`；UE 5.1.1 实机 doctor 与
+  smoke 连续通过。运行包仍为 6.5.5，未改 bridge/插件/DLL。
+
 ## [6.5.5] — 2026-11-02（搜索修复 + 启动幂等 + 自检脚本 · skill 6.5.10）
 
 - **节点搜索**：`search_blueprint_nodes` 内置 `PrintString` / `Delay` 目录；

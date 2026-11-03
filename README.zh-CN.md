@@ -9,7 +9,7 @@
 > （或团队的手游线）还在 5.1–5.7，这是覆盖 5.1–5.8 的方案。5.1 与 5.8 随包预编译桥，
 > 零编译。
 >
-> **版本 v6.5.5**（2026-11-02）· 101 条白名单命令 / 34 个 MCP 工具 · 离线 846 passed
+> **版本 v6.5.5**（2026-11-02）· 101 条白名单命令 / 34 个 MCP 工具 · 离线 852 passed
 >
 > [![GitHub release](https://img.shields.io/github/v/release/miracle1814/ue5-automation?display_name=tag)](https://github.com/miracle1814/ue5-automation/releases/latest)
 > [![Tests](https://github.com/miracle1814/ue5-automation/actions/workflows/tests.yml/badge.svg)](https://github.com/miracle1814/ue5-automation/actions/workflows/tests.yml)
@@ -21,7 +21,7 @@
 >
 > English: [README.md](README.md) · 快速开始：[START-HERE.zh-CN.md](START-HERE.zh-CN.md)
 >
-> SkillHub 技能包已更新到 **6.5.10**（对应运行包 **v6.5.5**）：搜索修复、重复启动幂等，并新增 `doctor.py` / `smoke.py` 自检。
+> SkillHub 技能包已更新到 **6.5.11**（对应运行包 **v6.5.5**）：自检可靠性修复，统一 health 解析，增加重试与结构化错误。
 
 ![UE5 蓝图自动化工作流总览](docs/assets/skillhub-overview.png)
 *读 → 写 → 编译 → 验证 → 收尾；`verified=true` 才算通过。*
@@ -239,7 +239,7 @@ pip install -r requirements-dev.txt
 python -m pytest skill/ue5-automation/tests --timeout=90
 ```
 
-当前基线：**846 passed / 0 failed**（95 skipped = 需要真机编辑器的在线用例）。
+当前基线：**852 passed / 0 failed**（95 skipped = 需要真机编辑器的在线用例）。
 
 ## 常见问题
 
