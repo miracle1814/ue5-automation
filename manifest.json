@@ -6,7 +6,7 @@
   "path_base": "source_root/dest_root are relative to workspace root; bridge.src_files are relative to release package root (dest_root)",
   "source_root": "skills/ue5-automation",
   "dest_root": "ue5-automation-skill-package",
-  "skill_version": "v6.5.11",
+  "skill_version": "v6.5.12",
   "package_version": "v6.5.5",
   "release_date": "2026-11-02",
   "root_sync": {
@@ -586,7 +586,7 @@
   },
   "readme_inject": {
     "package_version": "v6.5.5",
-    "skill_version": "v6.5.11"
+    "skill_version": "v6.5.12"
   },
   "excluded": [
     "output/BlueprintPythonBridge (legacy delivery, not in new flow)"

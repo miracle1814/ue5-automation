@@ -21,7 +21,7 @@
 >
 > English: [README.md](README.md) · 快速开始：[START-HERE.zh-CN.md](START-HERE.zh-CN.md)
 >
-> SkillHub 技能包已更新到 **6.5.11**（对应运行包 **v6.5.5**）：自检可靠性修复，统一 health 解析，增加重试与结构化错误。
+> SkillHub 技能包已更新到 **6.5.12**（对应运行包 **v6.5.5**）：统一陷阱编号、去重工具数量、明确 MCP/command 二选一，并补材质/UMG/DataTable 路径。
 
 ![UE5 蓝图自动化工作流总览](docs/assets/skillhub-overview.png)
 *读 → 写 → 编译 → 验证 → 收尾；`verified=true` 才算通过。*

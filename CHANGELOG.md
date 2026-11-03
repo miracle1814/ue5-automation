@@ -2,6 +2,17 @@
 
 以下为主要变化摘要。
 
+## [6.5.12] — 2026-11-03（文档一致性 · skill 6.5.12）
+
+- **编号统一**：`EXAMPLES.md` 的 `PTN-010` 改为与 `PITFALLS.md` 一致的 `P10`。
+- **数量去重**：删除文档中重复的 12/18/34 与 101 硬编码，统一以
+  `health.mcp_tool_count` / `ue5_tool_search` 为准。
+- **调用路径**：明确每个任务只用 MCP 或 HTTP command 一种路径，示例分组说明。
+- **覆盖补齐**：`EXAMPLES.md` 新增材质、UMG、DataTable 三类最小路径。
+- **版本时间线**：README 集中为“当前版本 + 版本时间线”，删除重复历史口径。
+- **验证**：离线 `852 passed / 95 skipped / 0 failed`；UE 5.1.1 实机 doctor 与
+  smoke 连续通过。运行包仍为 6.5.5，未改 bridge/插件/DLL。
+
 ## [6.5.11] — 2026-11-03（评测反馈修复 · skill 6.5.11）
 
 - **自检一致性**：新增 `scripts/bridge_client.py`，doctor / smoke 共用

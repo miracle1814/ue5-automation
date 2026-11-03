@@ -2,7 +2,7 @@
 slug: ue5-automation
 name: ue5-automation
 displayName: UE5 蓝图自动化
-version: 6.5.11
+version: 6.5.12
 runtime_version: 6.5.5
 summary: 让 AI 直接读写 UE5 蓝图节点、做编译诊断与 PIE 行为验证；Windows + UE 5.1/5.8。
 description: UE5 蓝图自动化操作规范（ue_automation / UE 自动化 / Unreal 自动化 / 蓝图自动化）：面向虚幻引擎（Unreal Engine 5 / UE5）的 Blueprint Automation，先读后写、整图事务、读回验证、编译诊断、PIE 行为验证、任务级撤销与多 Agent 协作。适用于已安装 ue5-automation bridge/MCP 的 UE5 工程；不适用于 C++ 代码生成、打包发布或纯美术制作。Windows + UE 5.1/5.8。本地 bridge 使用本机 token，无需外部 API Key。
@@ -37,9 +37,9 @@ tags:
 - 失败时诚实报错，不把“命令返回 200”当成“蓝图已改对”；
 - 多 Agent 并发时用幂等键/资产锁避免互相踩踏。
 
-> **版本对应：** Skill 包 `6.5.11` ↔ 运行包 `6.5.5`。本版按评测反馈统一自检脚本的 health 解析，补充重试与结构化错误；运行包不变。
+> **版本对应：** Skill 包 `6.5.12` ↔ 运行包 `6.5.5`。本版按评测反馈做文档一致性整理：统一陷阱编号、去重工具数量、明确 MCP/command 二选一、补材质/UMG/DataTable 路径；运行包不变。
 
-![UE5 蓝图自动化工作流总览](https://skillhub-1388575217.cos.accelerate.myqcloud.com/skill-overview-images/uploads/805989/0f3fc16a47894a9393c38c91c003d44a.png)
+![UE5 蓝图自动化工作流总览](https://skillhub-1388575217.cos.accelerate.myqcloud.com/skill-overview-images/uploads/805989/eac3dc274fa647d18f681c230064cc3f.png)
 
 > 读 → 写 → 编译 → 验证 → 收尾；`verified=true` 才算通过。
 
@@ -161,9 +161,10 @@ Gameplay、蓝图自动化、UE 编辑器。
 如果 `health` / `ue5_check_health` 不可用，**不要假装工具已连接**；先让用户按
 `references/INSTALL-WINDOWS.md` 安装运行包并启动编辑器。
 
-## 安装后自检（6.5.11）
+## 安装后自检（6.5.12）
 
-本 Skill 包随附两个只依赖 Python 标准库的脚本（无需 `requests`）：
+本 Skill 包随附两个可直接运行的自检脚本，均只依赖 Python 标准库（无需 `requests`），
+共用 `scripts/bridge_client.py`：
 
 ```bash
 python scripts/doctor.py    # token / health / bridge_loaded / 版本 / 项目路径
@@ -178,7 +179,7 @@ python scripts/doctor.py --retries 3   # 连接失败或 5xx 时重试（默认 
 
 ## 工具档位（先确认再调用）
 
-运行包默认是 **gateway 档**，`tools/list` 只返回 12 个入口：
+运行包默认是 **gateway 档**，`tools/list` 只暴露最少入口：
 
 `ue5_check_health`、`ue5_tool_search`、`ue5_execute_command`、`ue5_read_blueprint`、
 `ue5_search_blueprint_nodes`、`ue5_apply_blueprint_graph`、`ue5_compile_and_diagnose`、
@@ -187,15 +188,17 @@ python scripts/doctor.py --retries 3   # 连接失败或 5xx 时重试（默认 
 
 另外两档（重启编辑器生效）：
 
-- `UE5_MCP_CORE_TOOLS=1` → 18 个高频工具；
-- `UE5_MCP_ALL_TOOLS=1` 或 `UE5_MCP_PROFILE=full` → 全量 34 个。
+- `UE5_MCP_CORE_TOOLS=1` → 更多高频工具；
+- `UE5_MCP_ALL_TOOLS=1` 或 `UE5_MCP_PROFILE=full` → 全量工具。
+
+**同一任务选定一种调用路径后不要混用：MCP 工具或 HTTP command，二选一。**
 
 `health` 返回 `mcp_tool_profile` 与 `mcp_tool_count`。如果某个工具不在
 `tools/list` 里，用 `ue5_tool_search{query}` 发现后直接 `tools/call`，或走
 `ue5_execute_command{command, params}`；**不要因为目录里没看到就断言能力不存在**。
 
-命令白名单 101 条（v6.5.5），数量随版本增长。**以 `health.mcp_tool_count` 和
-`ue5_tool_search` 的结果为准，不要背数字。**
+工具与命令数量随运行包版本增长。**以 `health.mcp_tool_count` 和 `ue5_tool_search`
+的结果为准；不要在文档、提示词或脚本里写死数字。**
 
 ## 第一条规则：先检查工具可用性
 

@@ -81,7 +81,7 @@ L2 结果在 `result.l2.graphs[]`，每个图有 `nodes[]` 和 `connections[]`�
 ```
 
 ```json
-{"command":"get_pin_default_value","params":{"bp_path":"/Game/Blueprints/BP_Door","node_id":"<node_guids.print>","pin_name":"InString"}}
+{"command":"get_pin_default_value","params":{"bp_path":"/Game/Blueprints/BP_Door","node_id":"REPLACE_WITH_NODE_GUID","pin_name":"InString"}}
 ```
 
 ```json
@@ -112,7 +112,7 @@ L2 结果在 `result.l2.graphs[]`，每个图有 `nodes[]` 和 `connections[]`�
     "node_guid": "A1B2C3D4E5F6...",
     "node_name": "Branch",
     "pin_hint": "Condition",
-    "pitfall_ref": "PTN-010",
+    "pitfall_ref": "P10",
     "fix_hint": "扫描 Content Browser ..."
   }],
   "warnings": []
@@ -256,3 +256,77 @@ L2 结果在 `result.l2.graphs[]`，每个图有 `nodes[]` 和 `connections[]`�
 - 同 `idempotency_key` + 同命令/参数会重放上次成功结果，不会重复写；
 - 同 key 换命令返回 `idempotency_conflict`；
 - 锁是协作式，所有写操作走 `execute_command` 才经过锁层。
+
+## 7. 材质 / UMG / DataTable 最小路径
+
+> 以下统一使用 **HTTP command**；MCP 用户改用对应的 `ue5_*` 工具。
+> 同一个任务只选一种调用路径，不要混排。
+
+### 7.1 创建材质并连到 Base Color
+
+```json
+{"command":"material_create","params":{"material_path":"/Game/Materials/M_Test"}}
+```
+
+```json
+{"command":"material_add_expression","params":{
+  "material_path":"/Game/Materials/M_Test",
+  "expression_class":"VectorParameter",
+  "node_pos":[0,0]
+}}
+```
+
+返回的 `data.name` 就是下一步的 `from_name`：
+
+```json
+{"command":"material_connect_property","params":{
+  "material_path":"/Game/Materials/M_Test",
+  "from_name":"REPLACE_WITH_EXPRESSION_NAME",
+  "property_name":"base_color"
+}}
+```
+
+```json
+{"command":"material_compile","params":{"material_path":"/Game/Materials/M_Test"}}
+```
+
+### 7.2 创建 UMG 控件树
+
+```json
+{"command":"widget_create","params":{"widget_path":"/Game/UI/WBP_Test"}}
+```
+
+```json
+{"command":"widget_add_child","params":{
+  "widget_path":"/Game/UI/WBP_Test","widget_class":"CanvasPanel","widget_name":"Root"
+}}
+```
+
+```json
+{"command":"widget_add_child","params":{
+  "widget_path":"/Game/UI/WBP_Test","widget_class":"TextBlock",
+  "widget_name":"Title","parent_name":"Root"
+}}
+```
+
+```json
+{"command":"widget_read_tree","params":{"widget_path":"/Game/UI/WBP_Test"}}
+```
+
+`parent_name` 为空表示设为根；父控件需为 Panel（如 `CanvasPanel`）。
+短类名失败时改用完整路径（如 `/Script/UMG.TextBlock`）。
+
+### 7.3 DataTable 建表与读行
+
+```json
+{"command":"datatable_create","params":{
+  "asset_path":"/Game/Data/DT_Test",
+  "row_struct":"/Script/GameplayTags.GameplayTagTableRow"
+}}
+```
+
+```json
+{"command":"datatable_read","params":{"asset_path":"/Game/Data/DT_Test","limit":20}}
+```
+
+`datatable_write_csv` 会覆盖行内容，必须显式 `confirm:true`；不确认时工具会拒绝。

@@ -4,16 +4,23 @@
 写死命令总数**：数量随版本增长，先 `health` 看 `mcp_tool_count`，或
 `ue5_tool_search{query:"关键词"}` 发现。
 
-调用形式二选一：
+**每个任务只选一种调用路径，不要把 MCP 与 HTTP command 混在同一流程里。**
+
+MCP 工具：
 
 ```json
 {"tool":"ue5_read_blueprint","arguments":{"bp_path":"/Game/BP_Door","level":"L2"}}
+```
+
+HTTP command：
+
+```json
 {"command":"read_blueprint","params":{"bp_path":"/Game/BP_Door","level":"L2"}}
 ```
 
-工具目录有三档：`gateway`（默认 12 个入口）、`core`（18 个）、`full`（34 个）。
-不在 `tools/list` 里的能力，用 `ue5_tool_search` 发现后 `tools/call`，或走
-`ue5_execute_command`。
+工具目录分 `gateway`（默认，入口最少）、`core`（更多高频）、`full`（全量）三档；
+具体数量以 `health.mcp_tool_count` 为准。不在 `tools/list` 里的能力，用
+`ue5_tool_search` 发现后 `tools/call`，或走 `ue5_execute_command`。
 
 ## 读
 

@@ -7,7 +7,7 @@
 
 | 项 | 版本 |
 |---|---|
-| 本 Skill 包 | 6.5.11 |
+| 本 Skill 包 | 6.5.12 |
 | 运行包 | 6.5.5 |
 | 适用引擎 | UE 5.1.x 开箱；5.8.x 预编译；5.2–5.7 需自行重编译 |
 
@@ -149,11 +149,8 @@ python Content\Python\install_mcp.py
 {"status":"ok","ue_info":{"engine_version":"5.x","bridge_loaded":true}}
 ```
 
-同时确认 `mcp_tool_profile` 与 `mcp_tool_count`：
-
-- `gateway`：12 个入口；
-- `core`：18 个；
-- `full`：34 个。
+同时确认 `mcp_tool_profile` 与 `mcp_tool_count`。默认是 `gateway`（入口最少），
+`core` / `full` 依次提供更多工具；具体数量以 `health.mcp_tool_count` 为准。
 
 ## 6. 升级与卸载
 

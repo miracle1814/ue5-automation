@@ -10,68 +10,64 @@
 | `SKILL.md` | 技能入口：定位、工作流、硬规则、安全边界 |
 | `references/INSTALL-WINDOWS.md` | 安装、连接、客户端配置、自检 |
 | `references/COMMANDS.md` | 按任务分组的命令目录 |
-| `references/EXAMPLES.md` | 读图 / 写图 / 修编译 / 场景验证 / 撤销 / 多 Agent 示例 |
+| `references/EXAMPLES.md` | 读图 / 写图 / 修编译 / 材质 / UMG / DataTable / 撤销 / 多 Agent |
 | `references/PITFALLS.md` | 已知陷阱 Top 20+（症状 → 根因 → 修复） |
 | `references/TROUBLESHOOTING.md` | 常见故障排查 |
 | `references/SECURITY.md` | 安全模型与授权边界 |
 | `references/VERIFICATION.md` | 验证记录与已知边界 |
-| `scripts/bridge_client.py` | doctor / smoke 共用的 bridge 客户端：health 归一化、重试、结构化错误 |
+| `scripts/bridge_client.py` | doctor / smoke 共用：health 归一化、重试、结构化错误 |
 | `scripts/doctor.py` | 安装后体检：token / health / bridge 版本 / 项目路径 |
 | `scripts/smoke.py` | 5 分钟主路径冒烟（会创建/替换 `/Game/Test/BP_Smoke`） |
 
-## 版本对应
+## 当前版本
 
 | 项 | 版本 |
 |---|---|
-| Skill 包 | **6.5.11** |
+| Skill 包 | **6.5.12** |
 | 运行包（插件 + bridge） | **6.5.5** |
 | 适用引擎 | UE 5.1.x 开箱；5.8.x 预编译；5.2–5.7 需重编译 |
+| 更新日期 | 2026-11-03 |
 
-> 6.5.11 是**评测反馈修复版**，运行包仍为 6.5.5：统一 `doctor.py` / `smoke.py`
-> 的 health 解析，补充连接重试与结构化错误，并把验证记录改为“本轮实测在前、
-> 历史数据明确标注”。
+## 版本时间线
+
+| 日期 | Skill | 运行包 | 主要变化 |
+|---|---|---|---|
+| 2026-10-29 | 6.5.9 | 6.5.4 | UE 5.1.1 实机冒烟后的文档修订 |
+| 2026-11-02 | 6.5.10 | 6.5.5 | 节点搜索、启动幂等、doctor/smoke |
+| 2026-11-03 | 6.5.11 | 6.5.5 | 自检脚本可靠性：统一 health、重试、结构化错误 |
+| 2026-11-03 | 6.5.12 | 6.5.5 | 文档一致性与调用路径整理 |
+
+## 6.5.12 改了什么
+
+- 统一陷阱编号：示例中的 `PTN-010` 改为与 `PITFALLS.md` 一致的 `P10`。
+- 工具/命令数量只从 `health.mcp_tool_count` 读取；删除文档中的重复硬编码。
+- 明确“每个任务只选一种调用路径”：MCP 工具或 HTTP command，不混排。
+- 新增材质 / UMG / DataTable 的最小路径，补齐这三类触发场景。
+- 版本与日期集中到“当前版本 + 版本时间线”，删除重复历史口径。
+- 运行包仍为 6.5.5，本轮不改 bridge/插件/DLL。
 
 ## 6.5.11 改了什么
 
 - 新增 `scripts/bridge_client.py`：同时兼容 `/health` 的嵌套 `ue_info` 与
   `/command health` 的顶层字段，doctor / smoke 不再各写一套解析。
-- 自检脚本默认 `--retries 2`（最多 3 次尝试）：仅对连接失败和 HTTP 5xx 重试；
-  401/403 立即失败，避免错误 token 空转。
-- 失败输出统一为 `code` / `message` / `hint` / `http_status`；`--json` 同样包含
-  这些字段，便于 CI 消费。
-- `VERIFICATION.md` 分层：6.5.11 本轮实测在前；6.5.4 的 5.8 / 历史数据明确标为
-  历史记录，不再混入当前版本结论。
-- 运行包 6.5.5 不改；6.5.10 的搜索修复、启动幂等与自检脚本保留。
+- 自检脚本默认 `--retries 2`：仅对连接失败和 HTTP 5xx 重试；401/403 立即失败。
+- 失败输出统一为 `code` / `message` / `hint` / `http_status`，`--json` 同样包含。
+- 验证记录区分本轮实测与历史数据。
 
 ## 6.5.10 改了什么
 
 - 运行包 6.5.5：`search_blueprint_nodes` 内置 `PrintString` / `Delay` 目录，
-  `Print` 不再命中一堆 `Blueprint*`；`BeginPlay` 可正确命中 `ReceiveBeginPlay`。
-- 运行包 6.5.5：`start()` 增加跨模块启动锁与 5 秒端口宽限，重复加载不再刷
-  10048 双自启；锁异常时释放，允许下次重试。
-- 运行包 6.5.5：PIE 世界 `spawn_actor` 在 UE 5.1 的 Python API 未导出生成接口时
-  明确报错并给出替代路径，不再静默返回 `None`。
-- Skill 6.5.10：新增 `scripts/doctor.py` 与 `scripts/smoke.py`，只依赖标准库；
-  `smoke.py` 可重复运行（已存在 `/Game/Test/BP_Smoke` 时删除重建）。
-- 实测：UE 5.1.1 + `TP_BlankBP`，doctor 全绿；smoke 连续两次全绿
-  （`verified=true`、`compiled=true`、读回 `Hello from skill smoke`、`saved=true`）。
-- 6.5.9 的文档修订与 6.5.8/6.5.7/6.5.6/6.5.5 的结构改动保留。
+  `Print` 不再命中一堆 `Blueprint*`；`BeginPlay` 可命中 `ReceiveBeginPlay`。
+- 运行包 6.5.5：`start()` 增加跨模块启动锁与 5 秒端口宽限，消除 10048 双自启。
+- 运行包 6.5.5：PIE 世界 `spawn_actor` 在 UE 5.1 无生成入口时明确报错。
+- Skill 6.5.10：新增 `scripts/doctor.py` 与 `scripts/smoke.py`，smoke 可重复运行。
 
 ## 6.5.9 改了什么
 
-- 按 UE 5.1.1 实机冒烟结果补充：`search_blueprint_nodes` 对图内/事件可靠，
-  但 `KismetSystemLibrary` 的 `PrintString` 可能搜不到；示例改为 `BeginPlay`，
-  并说明直接用完整类路径 + `read_nodes` 回读。
-- 写明 `read_blueprint` L2 返回结构：`result.l2.graphs[].nodes` / `.connections`。
-- 写明 `verify_behavior` 的 bool 用小写 `true` / `false`，`exact` 大小写敏感。
-- 写明 `task_begin` 要在动手前调用；否则 `task_end` 会因无证据标 `unverified`。
-- TROUBLESHOOTING 新增：10048 双自启、搜索限制、bool 断言。
-- 安装文档修正：v6.5.4 包的安装脚本在 `tools\install.bat`；引擎 Python 依赖
-  必须装到引擎 site-packages，不能用 `--user`。
-- VERIFICATION 新增 UE 5.1.1 实机冒烟记录（建图/编译/读回/保存/PIE 验证）。
-- 6.5.8 的档位与参数修正保留：gateway **12** / core **18** / full **34**、
-  gateway 补 `ue5_verify_behavior`、pin 示例补 `bp_path`、disconnect/delete 命名。
-- 6.5.7/6.5.6/6.5.5 的曝光与结构改动保留。
+- 补充 UE 5.1.1 实机冒烟结论、`read_blueprint` L2 结构、bool 断言与
+  `task_begin` 时机；修正安装脚本路径和引擎 Python 依赖安装方式。
+
+> 更早的 6.5.8 及以前历史见仓库 `CHANGELOG.md`，本包不再重复堆叠旧版本说明。
 
 ## 安装
 

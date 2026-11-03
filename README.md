@@ -17,7 +17,7 @@ No compilation for 5.1 & 5.8 (prebuilt bridge DLLs included).
 
 **Download v6.5.5:** [portable package](https://github.com/miracle1814/ue5-automation/releases/download/v6.5.5/ue5-automation-v6.5.5-portable.zip) · [release notes](https://github.com/miracle1814/ue5-automation/releases/tag/v6.5.5) · [SkillHub listing](https://skillhub.cn/skills/user_9249b15b/ue5-automation)
 
-> The SkillHub skill package is at **6.5.11** (runtime **6.5.5**): self-check reliability fixes, unified health parsing, retries and structured errors.
+> The SkillHub skill package is at **6.5.12** (runtime **6.5.5**): doc consistency, single-source tool counts, one calling path, material/UMG/DataTable examples.
 
 ![UE5 Blueprint Automation workflow](docs/assets/skillhub-overview.png)
 *Read → write → compile → verify → save/undo. `verified=true` is the gate.*
