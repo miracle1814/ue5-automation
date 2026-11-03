@@ -33,7 +33,8 @@ import tempfile
 import time
 from pathlib import Path
 
-VERSION_EXPECT = "v6.5.4"
+# 随运行包发布更新；CI 可用 UE5_EXPECTED_VERSION 覆盖
+VERSION_EXPECT = os.environ.get("UE5_EXPECTED_VERSION", "v6.5.5")
 PROFILE_EXPECT = {"gateway": 12, "core": 18, "full": 34}
 COMMAND_EXPECT = 101
 MANIFEST_NAME = "RELEASE-MANIFEST.json"
